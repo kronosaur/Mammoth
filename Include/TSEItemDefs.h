@@ -81,7 +81,13 @@ enum EDisplayAttributeTypes
 	attribNegative,
 
 	attribEnhancement,
-	attribWeakness,
+	attribDegradation,
+
+	attribControlled,
+	attribBanned,
+
+	attribCustomMagenta,
+	attribCustomBrown,
 	};
 
 enum EAttributeTypes
@@ -109,9 +115,8 @@ struct SDisplayAttribute
 					if (*sText.GetASCIIZPointer() != '+')
 						sText = strPatternSubst(CONSTLIT("+%s"), sText);
 					break;
-
 				case attribNegative:
-					iType = attribWeakness;
+					iType = attribDegradation;
 					if (*sText.GetASCIIZPointer() != '-')
 						sText = strPatternSubst(CONSTLIT("-%s"), sText);
 					break;
@@ -123,7 +128,7 @@ struct SDisplayAttribute
 		{
 		int i;
 		for (i = 0; i < List.GetCount(); i++)
-			if (List[i].iType == attribEnhancement || List[i].iType == attribWeakness)
+			if (List[i].iType == attribEnhancement || List[i].iType == attribDegradation)
 				return true;
 
 		return false;

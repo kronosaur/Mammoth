@@ -386,7 +386,7 @@ void CArmorHUDImages::Realize (SHUDPaintCtx &Ctx)
 		if (ItemCtx.GetEnhancementDisplayAttributes(&Attribs))
 			{
 			const CString &sMods = Attribs[0].sText;
-			bool bDisadvantage = (Attribs[0].iType == attribWeakness);
+			bool bDisadvantage = (Attribs[0].iType == attribDegradation);
 
 			int cx = SmallFont.MeasureText(sMods);
 			m_Buffer.Fill(ARMOR_ENHANCE_X - cx - 4,

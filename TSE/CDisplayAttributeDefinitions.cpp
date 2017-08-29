@@ -17,6 +17,12 @@
 #define TYPE_POSITIVE							CONSTLIT("advantage")
 #define TYPE_NEGATIVE							CONSTLIT("disadvantage")
 #define TYPE_NEUTRAL							CONSTLIT("neutral")
+#define TYPE_ENHANCEMENT						CONSTLIT("enhancement")		//Allowed for flexibility
+#define TYPE_DEGRADATION						CONSTLIT("degradation")		//Allowed for flexibility
+#define TYPE_CONTROLLED							CONSTLIT("controlled")
+#define TYPE_BANNED								CONSTLIT("banned")
+#define TYPE_CUSTOM_MAGENTA						CONSTLIT("customMagenta")
+#define TYPE_CUSTOM_BROWN						CONSTLIT("customBrown")
 
 const int DEFAULT_LOCATION_FREQUENCY =			20;
 
@@ -103,6 +109,18 @@ bool CDisplayAttributeDefinitions::InitFromCCItem (ICCItem *pEntry, SDisplayAttr
 			iType = attribPositive;
 		else if (strEquals(sType, TYPE_NEGATIVE))
 			iType = attribNegative;
+		else if (strEquals(sType, TYPE_ENHANCEMENT))
+			iType = attribEnhancement;
+		else if (strEquals(sType, TYPE_DEGRADATION))
+			iType = attribDegradation;
+		else if (strEquals(sType, TYPE_CONTROLLED))
+			iType = attribControlled;
+		else if (strEquals(sType, TYPE_BANNED))
+			iType = attribBanned;
+		else if (strEquals(sType, TYPE_CUSTOM_MAGENTA))
+			iType = attribCustomMagenta;
+		else if (strEquals(sType, TYPE_CUSTOM_BROWN))
+			iType = attribCustomBrown;
 		else
 			return false;
 		}
@@ -154,12 +172,24 @@ ALERROR CDisplayAttributeDefinitions::InitFromXML (SDesignLoadCtx &Ctx, CXMLElem
 			CString sType;
 			if (pDef->FindAttribute(LABEL_TYPE_ATTRIB, &sType))
 				{
-				if (strEquals(sType, TYPE_POSITIVE))
+				if (strEquals(sType, TYPE_NEUTRAL))
+					pEntry->iType = attribNeutral;
+				else if (strEquals(sType, TYPE_POSITIVE))
 					pEntry->iType = attribPositive;
 				else if (strEquals(sType, TYPE_NEGATIVE))
 					pEntry->iType = attribNegative;
-				else if (strEquals(sType, TYPE_NEUTRAL))
-					pEntry->iType = attribNeutral;
+				else if (strEquals(sType, TYPE_ENHANCEMENT))
+					pEntry->iType = attribEnhancement;
+				else if (strEquals(sType, TYPE_DEGRADATION))
+					pEntry->iType = attribDegradation;
+				else if (strEquals(sType, TYPE_CONTROLLED))
+					pEntry->iType = attribControlled;
+				else if (strEquals(sType, TYPE_BANNED))
+					pEntry->iType = attribBanned;
+				else if (strEquals(sType, TYPE_CUSTOM_MAGENTA))
+					pEntry->iType = attribCustomMagenta;
+				else if (strEquals(sType, TYPE_CUSTOM_BROWN))
+					pEntry->iType = attribCustomBrown;
 				else
 					{
 					Ctx.sError = strPatternSubst(CONSTLIT("Invalid label type: %s."), sType);

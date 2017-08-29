@@ -398,15 +398,30 @@ enum EColorPalette
 
 	colorAreaAdvantage =			29,		//	H:210 S:100 B:65
 	colorAreaDisadvantage =			30,		//	H:0   S:80  B:65
-	colorAreaShields =				31,		//	H:90  S:80  B:45
-	colorTextAdvantage =			32,		//	H:210 S:20  B:100
-	colorTextDisadvantage =			33,		//	H:0   S:20  B:100
-	colorTextShields =				34,		//	H:90  S:20  B:100
-	colorTextAccelerator =			35,		//	H:60  S:100 B:100
-	colorAreaAccelerator =			36,		//	H:60  S:100 B:80
-	colorTextQuote =				37,		//	H:210 S:30  B:100
+	colorAreaEnhancement =			31,		//	H:120 S:80  B:65
+	colorAreaDegradation =			32,		//	H:30  S:80  B:65
+	colorAreaControlled =			33,		//	H:280 S:80  B:65
+	colorAreaBanned =				34,		//	H:0   S:0   B:0
+	colorAreaCustomMagenta=			35,		//  H:310 S:80  B:65
+	colorAreaCustomBrown=			36,		//  H:32  S:80  B:32
+	
+	colorAreaShields =				37,		//	H:90  S:80  B:45
 
-	colorCount =					38,
+	colorTextAdvantage =			38,		//	H:210 S:20  B:100
+	colorTextDisadvantage =			39,		//	H:0   S:20  B:100
+	colorTextEnhancement =			40,		//  H:120 S:20  B:100
+	colorTextDegradation =			41,		//  H:30  S:20  B:100
+	colorTextControlled =			42,		//  H:280 S:20  B:100
+	colorTextBanned =				43,		//  H:0   S:0   B:100
+	colorTextCustomMagenta =		44,		//  H:310 S:20  B:100
+	colorTextCustomBrown =			45,		//  H:32  S:20  B:100
+
+	colorTextShields =				46,		//	H:90  S:20  B:100
+	colorTextAccelerator =			47,		//	H:60  S:100 B:100
+	colorAreaAccelerator =			48,		//	H:60  S:100 B:80
+	colorTextQuote =				49,		//	H:210 S:30  B:100
+
+	colorCount =					50,
 	};
 
 enum EFontScale
