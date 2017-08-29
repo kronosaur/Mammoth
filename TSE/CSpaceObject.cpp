@@ -4464,17 +4464,37 @@ CG32bitPixel CSpaceObject::GetSymbolColor (void)
 //	Returns the color to paint this object in the player's scanner
 
 	{
+	
+	//Not sure where to put these
+	CG32bitPixel COLOR_WHITE = CG32bitPixel(255, 255, 255);
+	CG32bitPixel COLOR_GRAY = CG32bitPixel(200, 200, 200);
+	CG32bitPixel COLOR_CYAN = CG32bitPixel(50, 255, 255);
+	CG32bitPixel COLOR_GREEN = CG32bitPixel(0, 192, 0);
+	CG32bitPixel COLOR_RED = CG32bitPixel(255, 80, 80);
+	CG32bitPixel COLOR_ORANGE = CG32bitPixel(255, 200, 80);
+	CG32bitPixel COLOR_GREEN_YELLOW = CG32bitPixel(200, 255, 80);
+	CG32bitPixel COLOR_GREEN_LIGHT = CG32bitPixel(80, 255, 80);
+
+	CSpaceObject *pPlayerShip = g_pUniverse->GetPlayerShip();
 	CSovereign *pPlayer = g_pUniverse->GetPlayerSovereign();
-	if (GetSovereign() == pPlayer)
-		return CG32bitPixel(255, 255, 255);
+	if (pPlayerShip && this == pPlayerShip)
+		return COLOR_WHITE;
+	else if (GetSovereign() == pPlayer)
+		return COLOR_GRAY;
 	else if (IsWreck())
-		return CG32bitPixel(0, 192, 0);
+		return COLOR_GREEN;
 	else if (GetSovereign()->IsEnemy(pPlayer))
-		return CG32bitPixel(255, 80, 80);
+		return COLOR_RED;
+	else if (pPlayerShip && IsAngryAt(pPlayerShip))
+		return COLOR_ORANGE;
+	else if (GetSovereign()->IsNeutral(pPlayer))
+		return COLOR_GREEN_YELLOW;
+	else if (pPlayerShip && IsEscortingFriendOf(pPlayerShip) || IsPlayerWingman())
+		return COLOR_CYAN;
 	else if (GetCategory() == CSpaceObject::catShip)
-		return CG32bitPixel(80, 255, 80);
+		return COLOR_GREEN_LIGHT;
 	else
-		return CG32bitPixel(0, 192, 0);
+		return COLOR_GREEN;
 	}
 
 void CSpaceObject::GetVisibleEnemies (DWORD dwFlags, TArray<CSpaceObject *> *retList, CSpaceObject *pExcludeObj)
@@ -5053,7 +5073,19 @@ bool CSpaceObject::IsEscortingFriendOf (const CSpaceObject *pObj) const
 	else
 		return false;
 	}
+bool CSpaceObject::IsEscorting(const CSpaceObject *pObj) const
 
+//	IsEscorting
+//
+//	Returns TRUE if we're escorting pObj
+
+	{
+	CSpaceObject *pPrincipal = GetEscortPrincipal();
+	if (pPrincipal)
+		return pPrincipal == pObj;
+	else
+		return false;
+	}
 bool CSpaceObject::IsPlayerAttackJustified (void) const
 
 //	IsPlayerAttackJustified

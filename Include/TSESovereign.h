@@ -78,7 +78,8 @@ class CSovereign : public CDesignType
 		bool GetPropertyString (const CString &sProperty, CString *retsValue);
 		CString GetText (MessageTypes iMsg);
 		inline bool IsEnemy (CSovereign *pSovereign) { return (m_bSelfRel || (pSovereign != this)) && (GetDispositionTowards(pSovereign) == dispEnemy); }
-		inline bool IsFriend (CSovereign *pSovereign) { return (!m_bSelfRel && (pSovereign == this)) || (GetDispositionTowards(pSovereign) == dispFriend); }
+		inline bool IsNeutral(CSovereign *pSovereign) { return (m_bSelfRel || (pSovereign != this)) && (GetDispositionTowards(pSovereign) == dispNeutral); }
+		inline bool IsFriend (CSovereign *pSovereign) { return (GetDispositionTowards(pSovereign) == dispFriend); } //Self-checks are already optimized within the function
 		void MessageFromObj (CSpaceObject *pSender, const CString &sText);
 		void OnObjDestroyedByPlayer (CSpaceObject *pObj);
 		static Alignments ParseAlignment (const CString &sAlign);

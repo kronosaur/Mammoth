@@ -1147,6 +1147,7 @@ class CSpaceObject : public CObject
 		bool IsEnemy (const CDamageSource &Obj) const;
 		bool IsEnemyInRange (Metric rMaxRange, bool bIncludeStations = false);
 		bool IsEscortingFriendOf (const CSpaceObject *pObj) const;
+		bool IsEscorting(const CSpaceObject *pObj) const;
 		bool IsFriend (const CSpaceObject *pObj) const;
 		inline bool IsHighlighted (void) { return ((m_iHighlightCountdown != 0) || m_fSelected || m_iHighlightChar); }
 		bool IsInDamageCode (void) { return (m_fInDamage ? true : false); }
