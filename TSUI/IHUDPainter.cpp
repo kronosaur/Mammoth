@@ -159,12 +159,12 @@ void IHUDPainter::DrawModifier (CG32bitImage &Dest, int x, int y, const CString 
 				yBox,
 				cxBox,
 				cyBox,
-				(bDisadvantage ? VI.GetColor(colorAreaDisadvantage) : VI.GetColor(colorAreaAdvantage)));
+				(bDisadvantage ? VI.GetColor(colorAreaDegradation) : VI.GetColor(colorAreaEnhancement)));
 
 		SmallFont.DrawText(Dest,
 				xBox + (cxBox - cx) / 2,
 				yBox,
-				(bDisadvantage ? VI.GetColor(colorTextDisadvantage) : VI.GetColor(colorTextAdvantage)),
+				(bDisadvantage ? VI.GetColor(colorTextDegradation) : VI.GetColor(colorTextEnhancement)),
 				sText);
 		}
 	}

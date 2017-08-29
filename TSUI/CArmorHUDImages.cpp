@@ -393,12 +393,12 @@ void CArmorHUDImages::Realize (SHUDPaintCtx &Ctx)
 					pImage->yName + MediumFont.GetHeight() - HP_DISPLAY_HEIGHT,
 					cx + 8,
 					HP_DISPLAY_HEIGHT,
-					(bDisadvantage ? VI.GetColor(colorAreaDisadvantage) : VI.GetColor(colorAreaAdvantage)));
+					(bDisadvantage ? VI.GetColor(colorAreaDegradation) : VI.GetColor(colorAreaEnhancement)));
 
 			SmallFont.DrawText(m_Buffer,
 					ARMOR_ENHANCE_X - cx,
 					pImage->yName + 3,
-					(bDisadvantage ? VI.GetColor(colorTextDisadvantage) : VI.GetColor(colorTextAdvantage)),
+					(bDisadvantage ? VI.GetColor(colorTextDegradation) : VI.GetColor(colorTextEnhancement)),
 					sMods);
 			}
 		}

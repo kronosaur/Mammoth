@@ -168,14 +168,14 @@ void CWeaponHUDDefault::PaintDeviceStatus (CShip *pShip, DeviceNames iDev, int x
 					rcRect.top + 1, 
 					cxBonus + 4, 
 					cyHeight - 2, 
-					(bDisadvantage ? VI.GetColor(colorAreaDisadvantage) : VI.GetColor(colorAreaAdvantage)));
+					(bDisadvantage ? VI.GetColor(colorAreaDegradation) : VI.GetColor(colorAreaEnhancement)));
 
 			//	Bonus text
 
 			SmallFont.DrawText(m_Buffer,
 					rcRect.left,
 					rcRect.top,
-					(bDisadvantage ? VI.GetColor(colorTextDisadvantage) : VI.GetColor(colorTextAdvantage)),
+					(bDisadvantage ? VI.GetColor(colorTextDegradation) : VI.GetColor(colorTextEnhancement)),
 					sBonus);
 
 			cxBonus += 4;

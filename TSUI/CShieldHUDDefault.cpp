@@ -251,12 +251,12 @@ void CShieldHUDDefault::OnPaint (CG32bitImage &Dest, int x, int y, SHUDPaintCtx 
 						y + SHIELD_HP_DISPLAY_Y,
 						cx + 8,
 						SHIELD_HP_DISPLAY_HEIGHT,
-						(bDisadvantage ? VI.GetColor(colorAreaDisadvantage) : VI.GetColor(colorAreaAdvantage)));
+						(bDisadvantage ? VI.GetColor(colorAreaDegradation) : VI.GetColor(colorAreaEnhancement)));
 
 				SmallFont.DrawText(Dest,
 						x + SHIELD_HP_DISPLAY_X - cx - 4,
 						y + SHIELD_HP_DISPLAY_Y + (SHIELD_HP_DISPLAY_HEIGHT - SmallFont.GetHeight()) / 2,
-						(bDisadvantage ? VI.GetColor(colorTextDisadvantage) : VI.GetColor(colorTextAdvantage)),
+						(bDisadvantage ? VI.GetColor(colorTextDegradation) : VI.GetColor(colorTextEnhancement)),
 						sMods);
 				}
 			}
