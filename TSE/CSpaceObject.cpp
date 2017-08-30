@@ -4471,16 +4471,16 @@ CG32bitPixel CSpaceObject::GetSymbolColor (void)
 	CG32bitPixel COLOR_CYAN = CG32bitPixel(50, 255, 255);
 	CG32bitPixel COLOR_GREEN = CG32bitPixel(0, 192, 0);
 	CG32bitPixel COLOR_RED = CG32bitPixel(255, 80, 80);
-	CG32bitPixel COLOR_ORANGE = CG32bitPixel(255, 200, 80);
+	CG32bitPixel COLOR_ORANGE = CG32bitPixel(255, 150, 80);
 	CG32bitPixel COLOR_GREEN_YELLOW = CG32bitPixel(200, 255, 80);
 	CG32bitPixel COLOR_GREEN_LIGHT = CG32bitPixel(80, 255, 80);
 
 	CSpaceObject *pPlayerShip = g_pUniverse->GetPlayerShip();
 	CSovereign *pPlayer = g_pUniverse->GetPlayerSovereign();
-	if (pPlayerShip && this == pPlayerShip)
+	if (pPlayerShip && (this == pPlayerShip || IsEscorting(pPlayerShip) || IsPlayerWingman()))
 		return COLOR_WHITE;
 	else if (GetSovereign() == pPlayer)
-		return COLOR_GRAY;
+		return COLOR_CYAN;
 	else if (IsWreck())
 		return COLOR_GREEN;
 	else if (GetSovereign()->IsEnemy(pPlayer))
@@ -4489,9 +4489,7 @@ CG32bitPixel CSpaceObject::GetSymbolColor (void)
 		return COLOR_ORANGE;
 	else if (GetSovereign()->IsNeutral(pPlayer))
 		return COLOR_GREEN_YELLOW;
-	else if (pPlayerShip && IsEscortingFriendOf(pPlayerShip) || IsPlayerWingman())
-		return COLOR_CYAN;
-	else if (GetCategory() == CSpaceObject::catShip)
+	else if (GetSovereign()->IsFriend(pPlayer))
 		return COLOR_GREEN_LIGHT;
 	else
 		return COLOR_GREEN;
