@@ -4477,9 +4477,9 @@ CG32bitPixel CSpaceObject::GetSymbolColor (void)
 
 	CSpaceObject *pPlayerShip = g_pUniverse->GetPlayerShip();
 	CSovereign *pPlayer = g_pUniverse->GetPlayerSovereign();
-	if (pPlayerShip && (this == pPlayerShip || IsEscorting(pPlayerShip) || IsPlayerWingman()))
+	if (pPlayerShip && this == pPlayerShip)
 		return COLOR_WHITE;
-	else if (GetSovereign() == pPlayer)
+	else if (GetSovereign() == pPlayer || IsEscorting(pPlayerShip) || IsPlayerWingman())
 		return COLOR_CYAN;
 	else if (IsWreck())
 		return COLOR_GREEN;
