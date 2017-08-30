@@ -1405,6 +1405,8 @@ class CSpaceObject : public CObject
 		virtual bool HasAttribute (const CString &sAttribute) const { return sAttribute.IsBlank(); }
 		virtual bool HasSpecialAttribute (const CString &sAttrib) const;
 		virtual bool HasVolumetricShadow (void) const { return false; }
+		//virtual bool IsAffectedByGravity(void) { return IsAnchored(); }
+		virtual bool IsAffectedByGravity(void) { return true; }
 		virtual bool IsExplored (void) { return true; }
 		virtual bool IsImmutable (void) const { return false; }
 		virtual bool IsKnown (void) { return true; }

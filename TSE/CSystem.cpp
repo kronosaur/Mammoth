@@ -4981,6 +4981,9 @@ void CSystem::UpdateGravity (SUpdateCtx &Ctx, CSpaceObject *pGravityObj)
 			continue;
 			}
 
+		if (!pObj->IsAffectedByGravity())
+			continue;
+
 		//	Compute acceleration
 
 		Metric rAccel = r1EAccel * rScaleRadius2 / rDist2;
