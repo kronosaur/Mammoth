@@ -228,6 +228,7 @@ ICCItem *fnObjSendMessage (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 #define FN_OBJ_ADD_CONNECTION		124
 #define FN_OBJ_GET_DETECT_RANGE		125
 #define FN_OBJ_MESSAGE_TRANSLATE	126
+#define FN_OBJ_FIRE_POWER_INVOKE	127
 
 #define NAMED_ITEM_SELECTED_WEAPON		CONSTLIT("selectedWeapon")
 #define NAMED_ITEM_SELECTED_LAUNCHER	CONSTLIT("selectedLauncher")
@@ -1444,6 +1445,10 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 		{	"objFireOverlayEvent",			fnObjSet,		FN_OBJ_FIRE_OVERLAY_EVENT,
 			"(objFireOverlayEvent obj overlayID event [data]) -> result of event",
 			"iis*",	PPFLAG_SIDEEFFECTS,	},
+
+		{	"objFirePowerInvoke",			fnObjSet,		FN_OBJ_FIRE_POWER_INVOKE,
+			"(objFirePowerInvoke obj power [target]) -> result of event",
+			"ii*",	PPFLAG_SIDEEFFECTS, },
 
 		{	"objFixParalysis",				fnObjSet,		FN_OBJ_FIX_PARALYSIS,
 			"(objFixParalysis obj) -> True/Nil",
@@ -7310,7 +7315,28 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			pObj->FireCustomOverlayEvent(pArgs->GetElement(2)->GetStringValue(), dwOverlayID, pData, &pResult);
 			return pResult;
 			}
+		case FN_OBJ_FIRE_POWER_INVOKE:
+		{
+			DWORD dwPowerUNID = pArgs->GetElement(1)->GetIntegerValue();
+			CPower *pPower = g_pUniverse->FindPower(dwPowerUNID);
 
+			//If we don't specify a target, get the object's target
+			CSpaceObject *pTarget;
+			if (pArgs->GetCount() == 3)
+				pTarget = CreateObjFromItem(*pCC, pArgs->GetElement(2));
+			else
+				pTarget = pObj->GetTarget(CItemCtx(), true);
+
+			CString sError;
+
+			pPower->Invoke(pObj, pTarget, &sError);
+			if (sError.IsBlank())
+			{
+				::kernelDebugLogPattern("[%s %s Invoke]: %s", pObj->GetNounPhrase(), pPower->GetNounPhrase(), sError);
+				return pCC->CreateNil();
+			}
+			return pCC->CreateTrue();
+			}
 		case FN_OBJ_FIX_PARALYSIS:
 			{
 			CShip *pShip = pObj->AsShip();
