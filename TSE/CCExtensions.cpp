@@ -1447,8 +1447,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"iis*",	PPFLAG_SIDEEFFECTS,	},
 
 		{	"objFirePowerInvoke",			fnObjSet,		FN_OBJ_FIRE_POWER_INVOKE,
-			"(objFirePowerInvoke obj power [target]) -> result of event",
-			"ii*",	PPFLAG_SIDEEFFECTS, },
+			"(objFirePowerInvoke obj power [target] ['noInvokeCheck]) -> result of event",
+			"ii**",	PPFLAG_SIDEEFFECTS, },
 
 		{	"objFixParalysis",				fnObjSet,		FN_OBJ_FIX_PARALYSIS,
 			"(objFixParalysis obj) -> True/Nil",
@@ -7322,19 +7322,27 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 			//If we don't specify a target, get the object's target
 			CSpaceObject *pTarget;
-			if (pArgs->GetCount() == 3)
+			if (pArgs->GetCount() >= 3)
 				pTarget = CreateObjFromItem(*pCC, pArgs->GetElement(2));
 			else
 				pTarget = pObj->GetTarget(CItemCtx(), true);
 
 			CString sError;
 
-			pPower->Invoke(pObj, pTarget, &sError);
-			if (sError.IsBlank())
-			{
+			//	See if we need to fire the pre-invoke check
+
+			if (pArgs->GetCount() >= 4 && strEquals(pArgs->GetElement(3)->GetStringValue(), CONSTLIT("noInvokeCheck")))
+				pPower->Invoke(pObj, pTarget, &sError);
+			else if (pObj->IsPlayer())
+				pPower->InvokeByPlayer(pObj, pTarget, &sError);
+			else
+				pPower->InvokeByNonPlayer(pObj, pTarget, &sError);
+
+			if (!sError.IsBlank())
+				{
 				::kernelDebugLogPattern("[%s %s Invoke]: %s", pObj->GetNounPhrase(), pPower->GetNounPhrase(), sError);
 				return pCC->CreateNil();
-			}
+				}
 			return pCC->CreateTrue();
 			}
 		case FN_OBJ_FIX_PARALYSIS:
