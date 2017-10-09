@@ -818,6 +818,7 @@ class CWeaponClass : public CDeviceClass
 		int m_iCounterUpdateRate;				//	Ticks to update counter
 		int m_iCounterUpdate;					//	Inc/dec value per update
 		int m_iCounterActivate;					//	Inc/dec value per shot
+		int m_iCounterPowerUse;					//	Power use when counter is updating
 
 		bool m_bTargetStationsOnly;				//	Do not target ships
 

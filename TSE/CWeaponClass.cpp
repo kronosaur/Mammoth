@@ -19,6 +19,7 @@
 #define COOLING_RATE_ATTRIB						CONSTLIT("coolingRate")
 #define COUNTER_ATTRIB							CONSTLIT("counter")
 #define COUNTER_ACTIVATE_ATTRIB					CONSTLIT("counterActivate")
+#define COUNTER_POWER_USE_ATTRIB					CONSTLIT("counterPowerUse")
 #define COUNTER_UPDATE_ATTRIB					CONSTLIT("counterUpdate")
 #define COUNTER_UPDATE_RATE_ATTRIB				CONSTLIT("counterUpdateRate")
 #define FAILURE_CHANCE_ATTRIB					CONSTLIT("failureChance")
@@ -1183,6 +1184,11 @@ int CWeaponClass::CalcPowerUsed (SUpdateCtx &UpdateCtx, CInstalledDevice *pDevic
 	if (pDevice->IsReady() && (!pDevice->IsTriggered() || !pDevice->IsLastActivateSuccessful()))
 		iPower = m_iIdlePowerUse;
 
+	//	We consume additional power if our counter needs to update
+
+	if(IsCounterEnabled() && GetCounter(pDevice, pSource))
+		iPower += m_iCounterPowerUse;
+
 	//	Adjust based on power efficiency enhancement
 
 	const CItemEnhancementStack *pEnhancements = Ctx.GetEnhancementStack();
@@ -1543,6 +1549,7 @@ ALERROR CWeaponClass::CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CI
 		pWeapon->m_iCounterUpdateRate = pDesc->GetAttributeInteger(COUNTER_UPDATE_RATE_ATTRIB);
 		if (pWeapon->m_iCounterUpdateRate <= 0)
 			pWeapon->m_iCounterUpdateRate = 1;
+		pWeapon->m_iCounterPowerUse = pDesc->GetAttributeInteger(COUNTER_POWER_USE_ATTRIB);
 		}
 	else if ((pWeapon->m_iCounterActivate = pDesc->GetAttributeInteger(HEATING_ATTRIB)) > 0)
 		{
@@ -1553,6 +1560,7 @@ ALERROR CWeaponClass::CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CI
 		pWeapon->m_iCounterUpdateRate = pDesc->GetAttributeInteger(COOLING_RATE_ATTRIB);
 		if (pWeapon->m_iCounterUpdateRate <= 0)
 			pWeapon->m_iCounterUpdateRate = 1;
+		pWeapon->m_iCounterPowerUse = 0;
 		}
 	else
 		{
@@ -1560,6 +1568,7 @@ ALERROR CWeaponClass::CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CI
 		pWeapon->m_iCounterActivate = 0;
 		pWeapon->m_iCounterUpdate = 0;
 		pWeapon->m_iCounterUpdateRate = 0;
+		pWeapon->m_iCounterPowerUse = 0;
 		}
 
 	//	Linked fire options
