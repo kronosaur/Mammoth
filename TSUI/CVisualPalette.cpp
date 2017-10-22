@@ -58,12 +58,27 @@ static SColorInitTable COLOR_TABLE[] =
 		{	"TextDockText",				CG32bitPixel(0xAF, 0xB7, 0xBF) },	//	H:210 S:8   B:75
 		{	"TextDockTitle",			CG32bitPixel(0xE7, 0xF3, 0xFF) },	//	H:210 S:9   B:100
 		{	"TextDockTextWarning",		CG32bitPixel(0xFF, 0x33, 0x33) },	//	H:0   S:80  B:100
+
 		{	"AreaAdvantage",			CG32bitPixel(0x00, 0x53, 0xA6) },
-		{	"AreaDisadvantage",			CG32bitPixel(0xA6, 0x21, 0x21) },
+		{	"AreaDisadvantage",			CG32bitPixel(0xA6, 0x63, 0x21) },
+		{	"AreaEnhancement",			CG32bitPixel(0x21, 0xA6, 0x21) },
+		{	"AreaDegradation",			CG32bitPixel(0xA6, 0x21, 0x21) },
+		{	"AreaControlled",			CG32bitPixel(0x7A, 0x21, 0xA6) },
+		{	"AreaBanned",				CG32bitPixel(0x00, 0x00, 0x00) },
+		{	"AreaCustomMagenta",		CG32bitPixel(0xA6, 0x21, 0x90) },
+		{	"AreaCustomBrown",			CG32bitPixel(0x52, 0x33, 0x10) },
 
 		{	"AreaShields",				CG32bitPixel(0x45, 0x73, 0x17) },
+
 		{	"TextAdvantage",			CG32bitPixel(0xCC, 0xE5, 0xFF) },
-		{	"TextDisadvantage",			CG32bitPixel(0xFF, 0xCC, 0xCC) },
+		{	"TextDisadvantage",			CG32bitPixel(0xFF, 0xE6, 0xCC) },
+		{	"TextEnhancement",			CG32bitPixel(0xCC, 0xFF, 0xCC) },
+		{	"TextDegradation",			CG32bitPixel(0xFF, 0xCC, 0xCC) },
+		{	"TextControlled",			CG32bitPixel(0xEE, 0xCC, 0xFF) },
+		{	"TextBanned",				CG32bitPixel(0xFF, 0xFF, 0xFF) },
+		{	"TextCustomMagenta",		CG32bitPixel(0xFF, 0xCC, 0xF6) },
+		{	"TextCustomBrown",			CG32bitPixel(0xFF, 0xE7, 0xCC) },
+
 		{	"TextShields",				CG32bitPixel(0xE5, 0xFF, 0xCC) },
 		{	"TextAccelerator",			CG32bitPixel(0xFF, 0xFF, 0x00) },	//	H:60  S:100 B:100
 

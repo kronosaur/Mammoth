@@ -941,10 +941,10 @@ bool CItem::GetDisplayAttributes (CItemCtx &Ctx, TArray<SDisplayAttribute> *retL
 		//	Military and Illegal attributes
 
 		if (m_pItemType->HasLiteralAttribute(CONSTLIT("Military")))
-			retList->Insert(SDisplayAttribute(attribPositive, CONSTLIT("military")));
+			retList->Insert(SDisplayAttribute(attribControlled, CONSTLIT("military")));
 
 		if (m_pItemType->HasLiteralAttribute(CONSTLIT("Illegal")))
-			retList->Insert(SDisplayAttribute(attribNegative, CONSTLIT("illegal")));
+			retList->Insert(SDisplayAttribute(attribBanned, CONSTLIT("illegal")));
 
 		//	Add any enhancements
 
@@ -960,10 +960,10 @@ bool CItem::GetDisplayAttributes (CItemCtx &Ctx, TArray<SDisplayAttribute> *retL
 	//	type is unknown).
 
 	if (IsDamaged())
-		retList->Insert(SDisplayAttribute(attribNegative, CONSTLIT("damaged")));
+		retList->Insert(SDisplayAttribute(attribDegradation, CONSTLIT("damaged")));
 
 	if (IsDisrupted())
-		retList->Insert(SDisplayAttribute(attribNegative, CONSTLIT("ionized")));
+		retList->Insert(SDisplayAttribute(attribDegradation, CONSTLIT("ionized")));
 
 	//	Done
 
