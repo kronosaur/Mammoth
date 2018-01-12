@@ -1174,7 +1174,8 @@ class CShip : public CSpaceObject
 		virtual void GetVisibleDamageDesc (SVisibleDamage &Damage) override;
 		virtual bool HasAttribute (const CString &sAttribute) const override;
 		virtual bool ImageInObject (const CVector &vObjPos, const CObjectImageArray &Image, int iTick, int iRotation, const CVector &vImagePos) override;
-		virtual bool IsAnchored (void) const override { return (GetDockedObj() != NULL) || IsManuallyAnchored(); }
+		virtual bool IsAffectedByGravity(void) { return CSpaceObject::IsAffectedByGravity() && !IsInertialess(); } //This makes sure that Inertialess Drives stop gravity
+		virtual bool IsAnchored(void) const override { return (GetDockedObj() != NULL) || IsManuallyAnchored(); } 
 		virtual bool IsAngryAt (CSpaceObject *pObj) override;
 		virtual bool IsAttached (void) const override { return m_fShipCompartment; }
 		virtual bool IsBlind (void) const override { return m_iBlindnessTimer != 0; }
