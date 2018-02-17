@@ -298,7 +298,7 @@ class CReactorClass : public CDeviceClass
 
 		const CReactorDesc *GetReactorDesc (CItemCtx &Ctx, DWORD dwFlags = 0) const;
 		int GetMaxPower (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
-		int GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
+		Metric GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
         void InitDamagedDesc (void) const;
         void InitEnhancedDesc (void) const;
 
