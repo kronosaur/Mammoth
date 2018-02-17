@@ -298,6 +298,7 @@ class CReactorClass : public CDeviceClass
 
 		const CReactorDesc *GetReactorDesc (CItemCtx &Ctx, DWORD dwFlags = 0) const;
 		int GetMaxPower (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
+		int GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
         void InitDamagedDesc (void) const;
         void InitEnhancedDesc (void) const;
 
@@ -310,6 +311,7 @@ class CReactorClass : public CDeviceClass
 		//	Other properties
 
 		int m_iExtraPowerPerCharge;			//	Adds to max power
+		int m_iExtraFuelPerCharge;			//	Adds to max fuel
 
         //  Damaged/enhanced
         //  We allocate these as needed; the array matches m_pDesc

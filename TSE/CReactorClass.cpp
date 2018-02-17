@@ -5,6 +5,7 @@
 #include "PreComp.h"
 
 #define MAX_POWER_BONUS_PER_CHARGE_ATTRIB		CONSTLIT("maxPowerBonusPerCharge")
+#define MAX_FUEL_BONUS_PER_CHARGE_ATTRIB		CONSTLIT("maxFuelBonusPerCharge")
 
 #define PROPERTY_MAX_POWER						CONSTLIT("maxPower")
 #define PROPERTY_POWER							CONSTLIT("power")
@@ -74,6 +75,7 @@ ALERROR CReactorClass::CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, C
 	//	Some properties are not scaled (OK if negative).
 
 	pDevice->m_iExtraPowerPerCharge = pDesc->GetAttributeInteger(MAX_POWER_BONUS_PER_CHARGE_ATTRIB);
+	pDevice->m_iExtraFuelPerCharge = pDesc->GetAttributeInteger(MAX_FUEL_BONUS_PER_CHARGE_ATTRIB);
 
 	//	Done
 
@@ -144,6 +146,25 @@ int CReactorClass::GetPowerOutput (CItemCtx &Ctx, DWORD dwFlags) const
 		return 0;
 
 	return GetMaxPower(Ctx, *pDesc);
+	}
+
+int CReactorClass::GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const
+
+//	GetMaxFuel
+//
+//	Returns max fuel
+
+	{
+	Metric rMaxFuel = Desc.GetMaxFuel();
+
+	//	Adjust for charges
+
+	if (m_iExtraFuelPerCharge > 0)
+		rMaxFuel += m_iExtraFuelPerCharge * ItemCtx.GetItemCharges();
+
+	//	Done
+
+	return Max(0.0, rMaxFuel);
 	}
 
 int CReactorClass::GetMaxPower (CItemCtx &ItemCtx, const CReactorDesc &Desc) const
@@ -314,6 +335,10 @@ bool CReactorClass::OnAccumulatePerformance (CItemCtx &ItemCtx, SShipPerformance
 	//	For reactors with charges, increase power based on charges
 
 	Ctx.ReactorDesc.SetMaxPower(GetMaxPower(ItemCtx, *pDesc));
+
+	//	Also increase max fuel based on charges
+
+	Ctx.ReactorDesc.SetMaxFuel(GetMaxFuel(ItemCtx, *pDesc));
 
 	//	Done
 
