@@ -454,10 +454,10 @@ class CInstalledDevice
 		inline int GetRotation (void) const { return AngleMiddle(m_iMinFireArc, m_iMaxFireArc); }
 		inline int GetSlotBonus (void) const { return m_iSlotBonus; }
 		inline int GetSlotPosIndex (void) const { return m_iSlotPosIndex; }
-		inline int GetTemperature (void) const { return m_iTemperature; }
+		inline int GetCounter (void) const { return m_iCounter; }
 		inline int GetTimeUntilReady (void) const { return m_iTimeUntilReady; }
 		inline bool Has3DPos (void) const { return m_f3DPosition; }
-		inline void IncTemperature (int iChange) { m_iTemperature += iChange; }
+		inline void IncCounter (int iChange) { m_iCounter += iChange; }
 		inline bool IsDirectional (void) const { return (m_iMinFireArc != m_iMaxFireArc); }
 		inline bool IsDuplicate (void) const { return (m_fDuplicate ? true : false); }
 		inline bool IsEmpty (void) const { return m_pClass == NULL; }
@@ -494,7 +494,7 @@ class CInstalledDevice
 		inline void SetSecondary (bool bSecondary = true) { m_fSecondaryWeapon = bSecondary; }
 		inline void SetSlotBonus (int iBonus) { m_iSlotBonus = iBonus; }
 		inline void SetSlotPosIndex (int iIndex) { m_iSlotPosIndex = iIndex; }
-		inline void SetTemperature (int iTemperature) { m_iTemperature = iTemperature; }
+		inline void SetTemperature (int iTemperature) { m_iCounter = iTemperature; }
 		inline void SetTimeUntilReady (int iDelay) { m_iTimeUntilReady = iDelay; }
 		inline void SetTriggered (bool bTriggered) { m_fTriggered = bTriggered; }
 		inline void SetWaiting (bool bWaiting) { m_fWaiting = bWaiting; }
@@ -600,7 +600,7 @@ class CInstalledDevice
 		int m_iTimeUntilReady:16;				//	Timer counting down until ready to activate
 		int m_iFireAngle:16;					//	Last fire angle
 
-		int m_iTemperature:16;					//	Temperature for weapons
+		int m_iCounter:16;						//	Temperature/Capacitor for weapons
 		int m_iActivateDelay:16;				//	Cached activation delay
 		int m_iSlotBonus:16;					//	Bonus from device slot itself
 		int m_iSlotPosIndex:16;					//	Slot placement

@@ -23,7 +23,7 @@ CInstalledDevice::CInstalledDevice (void) :
 
 		m_iTimeUntilReady(0),
 		m_iFireAngle(0),
-		m_iTemperature(0),
+		m_iCounter(0),
 		m_iActivateDelay(0),
 		m_iSlotBonus(0),
 		m_iSlotPosIndex(-1),
@@ -312,7 +312,7 @@ void CInstalledDevice::Install (CSpaceObject *pObj, CItemListManipulator &ItemLi
 	m_iSlotPosIndex = -1;
 	m_pOverlay = NULL;
 	m_dwData = 0;
-	m_iTemperature = 0;
+	m_iCounter = 0;
 	m_fWaiting = false;
 	m_fEnabled = true;
 	m_fTriggered = false;
@@ -583,7 +583,7 @@ void CInstalledDevice::ReadFromStream (CSpaceObject *pSource, SLoadCtx &Ctx)
 	m_iFireAngle = (int)HIWORD(dwLoad);
 
 	Ctx.pStream->Read((char *)&dwLoad, sizeof(DWORD));
-	m_iTemperature = (int)HIWORD(dwLoad);
+	m_iCounter = (int)HIWORD(dwLoad);
 
 	if (Ctx.dwVersion < 92)
 		{
@@ -970,7 +970,7 @@ void CInstalledDevice::WriteToStream (IWriteStream *pStream)
 	dwSave = MAKELONG(m_iTimeUntilReady, m_iFireAngle);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 	
-	dwSave = MAKELONG(m_iSlotPosIndex, m_iTemperature);
+	dwSave = MAKELONG(m_iSlotPosIndex, m_iCounter);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
 	dwSave = MAKELONG(m_iSlotBonus, m_iDeviceSlot);

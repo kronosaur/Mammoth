@@ -1434,12 +1434,12 @@ bool CWeaponClass::ConsumeCapacitor (CItemCtx &ItemCtx, CWeaponFireDesc *pShot)
 
 	//	If we don't have enough capacitor power, then we can't fire
 
-	if (pDevice->GetTemperature() < m_iCounterActivate)
+	if (pDevice->GetCounter() < m_iCounterActivate)
 		return false;
 
 	//	Consume capacitor
 
-	pDevice->IncTemperature(m_iCounterActivate);
+	pDevice->IncCounter(m_iCounterActivate);
 	pSource->OnComponentChanged(comDeviceCounter);
 
 	return true;
@@ -2573,7 +2573,7 @@ int CWeaponClass::GetCounter (CInstalledDevice *pDevice, CSpaceObject *pSource, 
 
 	//	If we're a capacitor, then don't show the counter if we are full
 
-	if (m_Counter == cntCapacitor && pDevice->GetTemperature() >= MAX_COUNTER)
+	if (m_Counter == cntCapacitor && pDevice->GetCounter() >= MAX_COUNTER)
         {
         if (retiLevel)
             *retiLevel = MAX_COUNTER;
@@ -2584,9 +2584,9 @@ int CWeaponClass::GetCounter (CInstalledDevice *pDevice, CSpaceObject *pSource, 
 	//	Otherwise, return the current value
 
     if (retiLevel)
-        *retiLevel = pDevice->GetTemperature();
+        *retiLevel = pDevice->GetCounter();
 
-	return pDevice->GetTemperature();
+	return pDevice->GetCounter();
 	}
 
 int CWeaponClass::GetAlternatingPos (CInstalledDevice *pDevice) const
@@ -3238,10 +3238,10 @@ int CWeaponClass::GetWeaponEffectiveness (CSpaceObject *pSource, CInstalledDevic
 		//	If we're overheating, we will not be effective
 
 		case cntTemperature:
-			if (pDevice->IsWaiting() && pDevice->GetTemperature() > 0)
+			if (pDevice->IsWaiting() && pDevice->GetCounter() > 0)
 				return -100;
 
-			if (pDevice->GetTemperature() + m_iCounterActivate >= MAX_COUNTER)
+			if (pDevice->GetCounter() + m_iCounterActivate >= MAX_COUNTER)
 				{
 				pDevice->SetWaiting(true);
 				return -100;
@@ -3253,10 +3253,10 @@ int CWeaponClass::GetWeaponEffectiveness (CSpaceObject *pSource, CInstalledDevic
 		//	If our capacitor is discharged, we will not be effective
 
 		case cntCapacitor:
-			if (pDevice->IsWaiting() && pDevice->GetTemperature() < MAX_COUNTER)
+			if (pDevice->IsWaiting() && pDevice->GetCounter() < MAX_COUNTER)
 				return -100;
 
-			if (pDevice->GetTemperature() < m_iCounterActivate)
+			if (pDevice->GetCounter() < m_iCounterActivate)
 				{
 				pDevice->SetWaiting(true);
 				return -100;
@@ -4387,17 +4387,17 @@ void CWeaponClass::Update (CInstalledDevice *pDevice, CSpaceObject *pSource, SDe
 		{
 		if (m_iCounterUpdate > 0)
 			{
-			if (pDevice->GetTemperature() < MAX_COUNTER)
+			if (pDevice->GetCounter() < MAX_COUNTER)
 				{
-				pDevice->IncTemperature(Min(m_iCounterUpdate, MAX_COUNTER - pDevice->GetTemperature()));
+				pDevice->IncCounter(Min(m_iCounterUpdate, MAX_COUNTER - pDevice->GetCounter()));
 				pSource->OnComponentChanged(comDeviceCounter);
 				}
 			}
 		else
 			{
-			if (pDevice->GetTemperature() > 0)
+			if (pDevice->GetCounter() > 0)
 				{
-				pDevice->IncTemperature(Max(m_iCounterUpdate, -pDevice->GetTemperature()));
+				pDevice->IncCounter(Max(m_iCounterUpdate, -pDevice->GetCounter()));
 				pSource->OnComponentChanged(comDeviceCounter);
 				}
 			}
@@ -4471,12 +4471,12 @@ bool CWeaponClass::UpdateTemperature (CItemCtx &ItemCtx, CWeaponFireDesc *pShot,
 	//	If we're overheating, then something happens
 
 	CFailureDesc::EFailureTypes iFailure = CFailureDesc::failNone;
-	if (pDevice->GetTemperature() >= OVERHEAT_TEMP)
+	if (pDevice->GetCounter() >= OVERHEAT_TEMP)
 		{
 		//	If we're already past our max temperature, then the weapon does 
 		//	nothing.
 
-		if (pDevice->GetTemperature() >= MAX_TEMP)
+		if (pDevice->GetCounter() >= MAX_TEMP)
 			{
 			pSource->OnDeviceStatus(pDevice, failWeaponJammed);
 			return false;
@@ -4511,7 +4511,7 @@ bool CWeaponClass::UpdateTemperature (CItemCtx &ItemCtx, CWeaponFireDesc *pShot,
 
 	//	Update temperature
 
-	pDevice->IncTemperature(m_iCounterActivate);
+	pDevice->IncCounter(m_iCounterActivate);
 	pSource->OnComponentChanged(comDeviceCounter);
 
 	//	Done
