@@ -148,7 +148,7 @@ int CReactorClass::GetPowerOutput (CItemCtx &Ctx, DWORD dwFlags) const
 	return GetMaxPower(Ctx, *pDesc);
 	}
 
-int CReactorClass::GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const
+Metric CReactorClass::GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const
 
 //	GetMaxFuel
 //
