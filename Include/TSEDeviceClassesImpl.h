@@ -531,8 +531,9 @@ class CWeaponClass : public CDeviceClass
 		enum ECachedHandlers
 			{
 			evtOnFireWeapon				= 0,
+			evtOnCounterCooldown			= 1,
 
-			evtCount					= 1,
+			evtCount					= 2,
 			};
 
         struct SBalance
@@ -754,6 +755,7 @@ class CWeaponClass : public CDeviceClass
 		bool ConsumeAmmo (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, int iRepeatingCount, bool *retbConsumed);
 		bool ConsumeCapacitor (CItemCtx &ItemCtx, CWeaponFireDesc *pShot);
 		void FailureExplosion (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, bool *retbSourceDestroyed);
+		void FireOnCounterCooldown (CItemCtx &ItemCtx);
 		EOnFireWeaponResults FireOnFireWeapon (CItemCtx &ItemCtx, 
 											   CWeaponFireDesc *pShot,
 											   const CVector &vSource,

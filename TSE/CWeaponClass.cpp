@@ -51,6 +51,7 @@
 #define COUNTER_TYPE_CAPACITOR					CONSTLIT("capacitor")
 
 #define ON_FIRE_WEAPON_EVENT					CONSTLIT("OnFireWeapon")
+#define ON_COUNTER_COOLDOWN_EVENT				CONSTLIT("OnCounterCooldown")
 
 #define FIELD_AMMO_TYPE							CONSTLIT("ammoType")
 #define FIELD_AVERAGE_DAMAGE					CONSTLIT("averageDamage")	//	Average damage (1000x hp)
@@ -207,6 +208,7 @@ static CWeaponClass::SStdStats STD_WEAPON_STATS[MAX_ITEM_LEVEL] =
 static char *CACHED_EVENTS[CWeaponClass::evtCount] =
 	{
 		"OnFireWeapon",
+		"OnCounterCooldown",
 	};
 
 CFailureDesc CWeaponClass::g_DefaultFailure(CFailureDesc::profileWeaponFailure);
@@ -1788,6 +1790,33 @@ bool CWeaponClass::FindDataField (const CString &sField, CString *retsValue)
         Ammo = CItem(GetAmmoItem(iVariant), 1);
 
 	return FindAmmoDataField(Ammo, sRootField, retsValue);
+	}
+
+void CWeaponClass::FireOnCounterCooldown (CItemCtx &ItemCtx)
+
+//	FireOnCounterCooldown
+//
+//	Fires OnCounterCooldown event
+//
+//	Fire this event when the capacitor counter is full or when the temperature counter is 0
+
+	{
+	SEventHandlerDesc Event;
+	if (FindEventHandlerWeaponClass(evtOnCounterCooldown, &Event))
+		{
+		CCodeChainCtx Ctx;
+
+		Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
+		Ctx.SaveAndDefineItemVar(ItemCtx);
+
+		ICCItem *pResult = Ctx.Run(Event);
+		if (pResult->IsError())
+			ItemCtx.GetSource()->ReportEventError(ON_COUNTER_COOLDOWN_EVENT, pResult);
+
+		Ctx.Discard(pResult);
+
+		//	Done
+		}
 	}
 
 CWeaponClass::EOnFireWeaponResults CWeaponClass::FireOnFireWeapon (CItemCtx &ItemCtx, 
@@ -4396,18 +4425,30 @@ void CWeaponClass::Update (CInstalledDevice *pDevice, CSpaceObject *pSource, SDe
 		{
 		if (m_iCounterUpdate > 0)
 			{
+			//	Counter increases
+
 			if (pDevice->GetCounter() < MAX_COUNTER)
 				{
 				pDevice->IncCounter(Min(m_iCounterUpdate, MAX_COUNTER - pDevice->GetCounter()));
 				pSource->OnComponentChanged(comDeviceCounter);
+
+				//Fire OnCounterCooldown if we reach max with capacitor
+				if (m_Counter == cntCapacitor && pDevice->GetCounter() == MAX_COUNTER)
+					FireOnCounterCooldown(ItemCtx);
 				}
 			}
 		else
 			{
+			//	Counter decreases
+
 			if (pDevice->GetCounter() > 0)
 				{
 				pDevice->IncCounter(Max(m_iCounterUpdate, -pDevice->GetCounter()));
 				pSource->OnComponentChanged(comDeviceCounter);
+
+				//Fire OnCounterCooldown if we reach 0 with temperature
+				if (m_Counter == cntTemperature && pDevice->GetCounter() == 0)
+					FireOnCounterCooldown(ItemCtx);
 				}
 			}
 		}
