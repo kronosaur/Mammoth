@@ -255,6 +255,11 @@ class CStationType : public CDesignType
 			worldSizeL =			12,		//	75,000-149,999 km
 			worldSizeM =			13,		//	150,000+ km
 			};
+		enum ETransitionEffectType
+			{
+			transitionStargate =		0,
+			transitionAutomata =		1,
+			};
 
 		CStationType (void);
 		virtual ~CStationType (void);
@@ -326,6 +331,7 @@ class CStationType : public CDesignType
 		inline CG32bitPixel GetSpaceColor (void) { return m_rgbSpaceColor; }
 		inline int GetStealth (void) const { return m_iStealth; }
 		inline int GetTempChance (void) const { return m_iChance; }
+		inline ETransitionEffectType GetTransitionEffectType(void) { return m_pTransitionEffect; }
 		inline bool HasAnimations (void) const { return (m_pAnimations != NULL); }
 		inline bool HasGravity (void) const { return (m_rGravityRadius > 0.0); }
 		inline bool HasWreckImage (void) const { return m_HullDesc.CanBeWrecked(); }
@@ -532,6 +538,7 @@ class CStationType : public CDesignType
 		CString m_sStargateDestNode;					//	Dest node
 		CString m_sStargateDestEntryPoint;				//	Dest entry point
 		CEffectCreatorRef m_pGateEffect;				//	Effect when object gates in/out of station
+		ETransitionEffectType m_pTransitionEffect;		//	Effect type when transitioning between systems after gating
 
 		//	Miscellaneous
 		CEffectCreatorRef m_pBarrierEffect;				//	Effect when object hits station
