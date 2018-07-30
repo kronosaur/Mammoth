@@ -368,6 +368,7 @@ class CStationType : public CDesignType
 		static CStationType *AsType (CDesignType *pType) { return ((pType && pType->GetType() == designStationType) ? (CStationType *)pType : NULL); }
 		virtual bool FindDataField (const CString &sField, CString *retsValue) const override;
 		virtual CCommunicationsHandler *GetCommsHandler (void) override;
+		virtual const CDockingPortDesc *GetDockingPortDesc (void) const override { return &m_DockingPortDesc; }
 		virtual int GetLevel (int *retiMinLevel = NULL, int *retiMaxLevel = NULL) const override;
 		virtual CString GetNamePattern (DWORD dwNounFormFlags = 0, DWORD *retdwFlags = NULL) const override;
 		virtual CTradingDesc *GetTradingDesc (void) const override { return m_pTrade; }
@@ -487,6 +488,7 @@ class CStationType : public CDesignType
 		CCompositeImageDesc m_HeroImage;				//	For use in dock screens and covers
 
 		//	Docking
+		CDockingPortDesc m_DockingPortDesc;				//	Docking port definitions
 		CDockScreenTypeRef m_pFirstDockScreen;			//	First screen (may be NULL)
 		CDockScreenTypeRef m_pAbandonedDockScreen;		//	Screen to use when abandoned (may be NULL)
 		DWORD m_dwDefaultBkgnd;							//	Default background screen

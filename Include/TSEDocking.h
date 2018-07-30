@@ -5,6 +5,32 @@
 
 #pragma once
 
+class CDockingPortDesc
+	{
+	public:
+		enum DockingPortLayer
+			{
+			plStandard =		0,					//	Depends on position
+
+			plBringToFront =	1,					//	Ship is always in front of station
+			plSendToBack =		2,					//	Ship is always behind station
+			};
+
+		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pElement, int iScale = -1);
+
+	private:
+		struct SPortDesc
+			{
+			DockingPortLayer iLayer = plStandard;	//	Port layer relative to station
+			C3DObjectPos Pos;						//	Position of dock relative to object
+			CVector vPos;							//	Calculated position of dock (relative coords)
+			int iRotation = 0;						//	Rotation of ship at dock
+			};
+
+		TArray<SPortDesc> m_Ports;
+		int m_iMaxDist = 0;							//	Max distance for docking (in light-seconds)
+	};
+
 class CDockingPorts
 	{
 	public:
@@ -22,7 +48,6 @@ class CDockingPorts
 		inline int GetPortCount (CSpaceObject *pOwner = NULL) const { return m_iPortCount; }
 		inline CSpaceObject *GetPortObj (CSpaceObject *pOwner, int iPort) { ASSERT(m_pPort[iPort].pObj == NULL || m_pPort[iPort].iStatus != psEmpty); return m_pPort[iPort].pObj; }
 		inline CVector GetPortPos (CSpaceObject *pOwner, int iPort, CSpaceObject *pShip, bool *retbPaintInFront = NULL, int *retiRotation = NULL) { return GetPortPos(pOwner, m_pPort[iPort], pShip, retbPaintInFront, retiRotation); }
-		CVector GetPortPosAtRotation (int iOwnerRotation, int iScale, int iPort, bool *retbPaintInFront = NULL, int *retiRotation = NULL) const;
 		int GetPortsInUseCount (CSpaceObject *pOwner);
 		void InitPorts (CSpaceObject *pOwner, int iCount, Metric rRadius);
 		void InitPorts (CSpaceObject *pOwner, const TArray<CVector> &Desc);
@@ -78,6 +103,7 @@ class CDockingPorts
 		void CleanUp (void);
 		void Copy (const CDockingPorts &Src);
 		CVector GetPortPos (CSpaceObject *pOwner, const SDockingPort &Port, CSpaceObject *pShip, bool *retbPaintInFront = NULL, int *retiRotation = NULL) const;
+		CVector GetPortPosAtRotation (int iOwnerRotation, int iScale, int iPort, bool *retbPaintInFront = NULL, int *retiRotation = NULL) const;
 		void InitXYPortPos (CSpaceObject *pOwner, int iScale = -1) const;
 		void InitXYPortPos (int iRotation, int iScale) const;
 		bool IsDocked (CSpaceObject *pObj);

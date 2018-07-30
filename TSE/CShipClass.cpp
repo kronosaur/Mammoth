@@ -3364,6 +3364,7 @@ void CShipClass::OnInitFromClone (CDesignType *pSource)
 	m_Character = pClass->m_Character;
 
 	m_DockingPorts = pClass->m_DockingPorts;
+	m_DockingPortDesc = pClass->m_DockingPortDesc;
 	m_pDefaultScreen = pClass->m_pDefaultScreen;
 	m_dwDefaultBkgnd = pClass->m_dwDefaultBkgnd;
 	m_fHasDockingPorts = pClass->m_fHasDockingPorts;
@@ -3631,6 +3632,8 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 		return error;
 
 	//	Initialize docking data
+
+	if (error = m_DockingPortDesc.InitFromXML(Ctx, ))
 
 	m_DockingPorts.InitPortsFromXML(NULL, pDesc, GetImageViewportSize());
 	if (m_DockingPorts.GetPortCount() > 0)

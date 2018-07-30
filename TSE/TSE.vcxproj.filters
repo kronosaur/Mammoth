@@ -1240,6 +1240,9 @@
     <ClCompile Include="SDamageCtx.cpp">
       <Filter>Source Files\Items</Filter>
     </ClCompile>
+    <ClCompile Include="CDockingPortDesc.cpp">
+      <Filter>Source Files\Stations</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\.gitignore">

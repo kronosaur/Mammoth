@@ -355,6 +355,7 @@
     <ClCompile Include="CDesignTypeCriteria.cpp" />
     <ClCompile Include="CDeviceSystem.cpp" />
     <ClCompile Include="CDisplayAttributeDefinitions.cpp" />
+    <ClCompile Include="CDockingPortDesc.cpp" />
     <ClCompile Include="CDockingPorts.cpp">
       <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Disabled</Optimization>
       <Optimization Condition="'$(Configuration)|$(Platform)'=='SteamDebug|Win32'">Disabled</Optimization>

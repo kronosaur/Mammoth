@@ -319,6 +319,7 @@ class CDesignType
 
 		virtual bool FindDataField (const CString &sField, CString *retsValue) const;
 		virtual CCommunicationsHandler *GetCommsHandler (void) { return NULL; }
+		virtual const CDockingPortDesc *GetDockingPortDesc (void) const { return NULL; }
 		virtual CEconomyType *GetEconomyType (void) const;
 		virtual CCurrencyAndValue GetTradePrice (CSpaceObject *pObj = NULL, bool bActual = false) const;
 		virtual CTradingDesc *GetTradingDesc (void) const { return NULL; }
