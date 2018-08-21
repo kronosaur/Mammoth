@@ -31,6 +31,7 @@
 #define MAX_FIRE_ARC_ATTRIB						CONSTLIT("maxFireArc")
 #define MIN_FIRE_ARC_ATTRIB						CONSTLIT("minFireArc")
 #define MULTI_TARGET_ATTRIB						CONSTLIT("multiTarget")
+#define NO_FIRE_WHEN_BLIND_ATTRIB				CONSTLIT("noFireWhenBlind")
 #define OMNIDIRECTIONAL_ATTRIB					CONSTLIT("omnidirectional")
 #define POS_ANGLE_ATTRIB						CONSTLIT("posAngle")
 #define POS_RADIUS_ATTRIB						CONSTLIT("posRadius")
@@ -93,6 +94,7 @@
 #define PROPERTY_MAX_DAMAGE						CONSTLIT("maxDamage")
 #define PROPERTY_MIN_DAMAGE						CONSTLIT("minDamage")
 #define PROPERTY_MULTI_SHOT						CONSTLIT("multiShot")
+#define PROPERTY_NO_FIRE_WHEN_BLIND				CONSTLIT("noFireWhenBlind")
 #define PROPERTY_OMNIDIRECTIONAL				CONSTLIT("omnidirectional")
 #define PROPERTY_REPEATING						CONSTLIT("repeating")
 #define PROPERTY_SECONDARY						CONSTLIT("secondary")
@@ -1241,6 +1243,9 @@ bool CWeaponClass::ConsumeAmmo (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, int i
 	if (pDevice == NULL)
 		return false;
 
+	if (pSource->IsBlind() && m_bNoFireWhenBlind)
+		return false;
+
 	int iAmmoConsumed = FireGetAmmoToConsume(ItemCtx, pShot, iRepeatingCount);
 
 	//	For repeating weapons, we check at the beginning and consume at the end.
@@ -1436,6 +1441,7 @@ ALERROR CWeaponClass::CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CI
 	pWeapon->m_bReportAmmo = pDesc->GetAttributeBool(REPORT_AMMO_ATTRIB);
 	pWeapon->m_bTargetStationsOnly = pDesc->GetAttributeBool(TARGET_STATIONS_ONLY_ATTRIB);
 	pWeapon->m_bContinuousConsumePerShot = pDesc->GetAttributeBool(CONTINUOUS_CONSUME_PERSHOT_ATTRIB);
+	pWeapon->m_bNoFireWhenBlind = pDesc->GetAttributeBool(NO_FIRE_WHEN_BLIND_ATTRIB);
 
 
 	//	Configuration
@@ -2467,6 +2473,9 @@ ICCItem *CWeaponClass::FindAmmoItemProperty (CItemCtx &Ctx, const CItem &Ammo, c
 
 	else if (strEquals(sProperty, PROPERTY_MULTI_SHOT))
 		return CC.CreateBool(m_Configuration != ctSingle);
+
+	else if (strEquals(sProperty, PROPERTY_NO_FIRE_WHEN_BLIND))
+		return CC.CreateBool(m_bNoFireWhenBlind);
 
 	else if (strEquals(sProperty, PROPERTY_OMNIDIRECTIONAL))
 		return CC.CreateBool(GetRotationType(Ctx) == rotOmnidirectional);
