@@ -195,6 +195,7 @@ SInstallItemResultsData INSTALL_ITEM_RESULTS_TABLE[] =
 		{	"ok",						0,		0,	},
 
 		{	"armorTooHeavy",			1,		-1,	},
+		{	"armorTooLight",			1,		-1,	},
 		{	"cannotInstall",			-1,		-1,	},
 		{	"noDeviceSlotsLeft",		-1,		2	},
 		{	"noNonWeaponSlotsLeft",		-1,		13	},

@@ -675,6 +675,7 @@ class CSpaceObject : public CObject
 			insOK = 0,							//	OK to install
 
 			insArmorTooHeavy,					//	Armor is too heavy for ship
+			insArmorTooLight,					//	Armor is too light for ship
 			insCannotInstall,					//	Cannot install (due to custom reason)
 			insNoDeviceSlotsLeft,				//	No device slots left
 			insNoNonWeaponSlotsLeft,			//	No non-weapon slots left

@@ -1000,6 +1000,7 @@ bool CShip::CanInstallItem (const CItem &Item, int iSlot, InstallItemResults *re
 	if (Item.IsArmor())
 		{
 		int iMaxArmor = Hull.GetMaxArmorMass();
+		int iMinArmor = Hull.GetMinArmorMass();
 
 		//	See if we are compatible
 
@@ -1015,6 +1016,11 @@ bool CShip::CanInstallItem (const CItem &Item, int iSlot, InstallItemResults *re
 
 		else if (iMaxArmor && Item.GetMassKg() > iMaxArmor)
 			iResult = insArmorTooHeavy;
+
+		//	See if the armor is too light
+
+		else if (Item.GetMassKg() < iMinArmor)
+			iResult = insArmorTooLight;
 
 		//	Fire CanBeInstalled to check for custom conditions
 
