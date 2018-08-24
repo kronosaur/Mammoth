@@ -158,8 +158,7 @@ int CHullDesc::CalcMinArmorMassForSpeed (int iSpeed, int iStdSpeed) const
 	int iPenaltyRange = m_iMaxArmorMass - m_iStdArmorMass;
 	int iPenaltyMassPerPoint = iPenaltyRange / (1 - m_iMaxArmorSpeedPenalty);
 
-	int iMinArmorMass = m_iStdArmorMass / 2;
-	int iBonusRange = m_iStdArmorMass - iMinArmorMass;
+	int iBonusRange = m_iStdArmorMass - m_iMinArmorMass;
 	int iBonusMassPerPoint = (m_iMinArmorSpeedBonus > 0 ? iBonusRange / m_iMinArmorSpeedBonus : 0);
 
 	if (iSpeed < iStdSpeed)
