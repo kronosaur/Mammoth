@@ -3773,10 +3773,10 @@ ICCItemPtr CShipClass::OnGetProperty (CCodeChainCtx &Ctx, const CString &sProper
 
 	if (strEquals(sProperty, PROPERTY_CURRENCY))
 		return ICCItemPtr(CC.CreateInteger(GetEconomyType()->GetUNID()));
-		
+
 	else if (strEquals(sProperty, PROPERTY_CURRENCY_NAME))
 		return ICCItemPtr(CC.CreateString(GetEconomyType()->GetSID()));
-		
+
 	else if (strEquals(sProperty, PROPERTY_DEFAULT_SOVEREIGN))
 		return (m_pDefaultSovereign.GetUNID() ? ICCItemPtr(CC.CreateInteger(m_pDefaultSovereign.GetUNID())) : ICCItemPtr(CC.CreateNil()));
 
@@ -3802,8 +3802,7 @@ ICCItemPtr CShipClass::OnGetProperty (CCodeChainCtx &Ctx, const CString &sProper
 		return ICCItemPtr(CalcMaxSpeedByArmorMass(Ctx));
 
 	else if (strEquals(sProperty, PROPERTY_MIN_ARMOR_MASS))
-		return ICCItemPtr(CC.CreateInteger(m_Hull.GetMinArmorMass()))
-
+		return ICCItemPtr(CC.CreateInteger(m_Hull.GetMinArmorMass()));
 
 	else if (strEquals(sProperty, PROPERTY_STD_ARMOR_MASS))
 		return (m_Hull.GetStdArmorMass() > 0 ? ICCItemPtr(CC.CreateInteger(m_Hull.GetStdArmorMass())) : ICCItemPtr(CC.CreateNil()));

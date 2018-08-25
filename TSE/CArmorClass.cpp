@@ -1996,7 +1996,7 @@ bool CArmorClass::GetReferenceSpeedBonus (CItemCtx &Ctx, int *retiSpeedBonus) co
 				*retiSpeedBonus = INT_MIN;
 			return true;
 			}
-		else if (iArmorMass > pShipClass->GetHullDesc().GetMinArmorMass())
+		else if (iArmorMass < pShipClass->GetHullDesc().GetMinArmorMass())
 			{
 			if (retiSpeedBonus)
 				*retiSpeedBonus = INT_MAX;
