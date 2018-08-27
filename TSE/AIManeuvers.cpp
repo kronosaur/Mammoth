@@ -540,7 +540,11 @@ void CAIBehaviorCtx::ImplementAttackNearestTarget (CShip *pShip, Metric rMaxRang
 
 		if (GetBestWeapon() == NULL)
 			{
-			(*iopTarget) = NULL;
+			//	Some ships only have secondary weapons. In that case, keep the 
+			//	target so that we can attack with secondaries.
+
+			if (!HasSecondaryWeapons())
+				(*iopTarget) = NULL;
 			return;
 			}
 
@@ -616,7 +620,25 @@ void CAIBehaviorCtx::ImplementAttackTarget (CShip *pShip, CSpaceObject *pTarget,
 
 	if (iFireDir != -1
 			&& !NoDogfights())
-		ImplementManeuver(pShip, iFireDir, false);
+		{
+		bool bThrustWhileAim = false;
+		int iFacingAngle = pShip->GetRotation();
+
+		if (rTargetDist2 > GetPrimaryAimRange2() / 9)
+			{
+			if (AreAnglesAligned(iFireDir, iFacingAngle, 30))
+				bThrustWhileAim = true;
+			}
+		else 
+			{
+			CVector vTargetVel = pTarget->GetVel() - pShip->GetVel();
+			if (vTargetVel.Length() > pShip->GetMaxSpeed() / 3
+					&& AreAnglesAligned(VectorToPolar(vTargetVel), iFacingAngle, 30))
+				bThrustWhileAim = true;
+			}
+
+		ImplementManeuver(pShip, iFireDir, bThrustWhileAim);
+		}
 
 	DEBUG_CATCH
 	}
@@ -671,7 +693,7 @@ bool CAIBehaviorCtx::ImplementAttackTargetManeuver (CShip *pShip, CSpaceObject *
 				{
 				int iClock = g_pUniverse->GetTicks() / (170 + pShip->GetDestiny() / 3);
 				int iAngle = pShip->AlignToRotationAngle((pShip->GetDestiny() + (iClock * 141 * (1 + pShip->GetDestiny()))) % 360);
-				Metric rRadius = MIN_STATION_TARGET_DIST + (LIGHT_SECOND * (pShip->GetDestiny() % 100) / 10.0);
+				Metric rRadius = Max(MIN_STATION_TARGET_DIST, pTarget->GetHitSize()) + (LIGHT_SECOND * (pShip->GetDestiny() % 100) / 10.0);
 
 				//	This is the position that we want to go to
 
@@ -774,7 +796,7 @@ bool CAIBehaviorCtx::ImplementAttackTargetManeuver (CShip *pShip, CSpaceObject *
 				{
 				int iClock = g_pUniverse->GetTicks() / (170 + pShip->GetDestiny() / 3);
 				int iAngle = pShip->AlignToRotationAngle((pShip->GetDestiny() + (iClock * 141 * (1 + pShip->GetDestiny()))) % 360);
-				Metric rRadius = MIN_STATION_TARGET_DIST + (LIGHT_SECOND * (pShip->GetDestiny() % 100) / 10.0);
+				Metric rRadius = Max(MIN_STATION_TARGET_DIST, pTarget->GetHitSize()) + (LIGHT_SECOND * (pShip->GetDestiny() % 100) / 10.0);
 
 				//	This is the position that we want to go to
 
@@ -1340,7 +1362,6 @@ void CAIBehaviorCtx::ImplementFireWeaponOnTarget (CShip *pShip,
 	{
 	DEBUG_TRY
 
-	int iFireDir = -1;
 	int iTick = pShip->GetSystem()->GetTick();
 
 #ifdef DEBUG
@@ -1441,11 +1462,17 @@ void CAIBehaviorCtx::ImplementFireWeaponOnTarget (CShip *pShip,
 		{
 #ifdef DEBUG
 		{
+		CInstalledDevice *pWeapon = pShip->GetNamedDevice(iWeaponToFire);
+
 		char szDebug[1024];
 		if (bAimError)
-			wsprintf(szDebug, "%s: false positive  iAim=%d  iFireAngle=%d", pShip->GetNamedDevice(iWeaponToFire)->GetName().GetASCIIZPointer(), iAimAngle, iFireAngle);
+			wsprintf(szDebug, "%s: false positive  iAim=%d  iFireAngle=%d", pWeapon->GetName().GetASCIIZPointer(), iAimAngle, iFireAngle);
+		else if (!pShip->GetWeaponIsReady(iWeaponToFire))
+			wsprintf(szDebug, "%s: aligned; NOT READY", pWeapon->GetName().GetASCIIZPointer());
+		else if (rTargetDist2 > (rWeaponRange * rWeaponRange))
+			wsprintf(szDebug, "%s: aligned; TARGET OUT OF RANGE", pWeapon->GetName().GetASCIIZPointer());
 		else
-			wsprintf(szDebug, "%s: aligned  iAim=%d  iFireAngle=%d", pShip->GetNamedDevice(iWeaponToFire)->GetName().GetASCIIZPointer(), iAimAngle, iFireAngle);
+			wsprintf(szDebug, "%s: aligned", pWeapon->GetName().GetASCIIZPointer());
 
 		DEBUG_COMBAT_OUTPUT(szDebug);
 		}
@@ -1455,7 +1482,7 @@ void CAIBehaviorCtx::ImplementFireWeaponOnTarget (CShip *pShip,
 		//	in range of the target, then fire!
 
 		if (pShip->GetWeaponIsReady(iWeaponToFire)
-				&& rTargetDist2 < (rWeaponRange * rWeaponRange))
+				&& rTargetDist2 <= (rWeaponRange * rWeaponRange))
 			{
 			CInstalledDevice *pWeapon = pShip->GetNamedDevice(iWeaponToFire);
 
@@ -1487,11 +1514,6 @@ void CAIBehaviorCtx::ImplementFireWeaponOnTarget (CShip *pShip,
 		{
 		DEBUG_COMBAT_OUTPUT("Fire: Weapon NOT aligned");
 
-		//	If the weapon is not aligned, turn to aim
-
-		if (iFacingAngle != -1)
-			iFireDir = iFacingAngle;
-
 #ifdef DEBUG_SHIP
 		if (bDebug)
 			g_pUniverse->DebugOutput("Face target at distance: %d moving at: %d%%c", 
@@ -1500,8 +1522,10 @@ void CAIBehaviorCtx::ImplementFireWeaponOnTarget (CShip *pShip,
 #endif
 		}
 
+	//	Turn to aim, even if weapon is already approximately aligned
+
 	if (retiFireDir)
-		*retiFireDir = iFireDir;
+		*retiFireDir = iFacingAngle;
 
 	DEBUG_CATCH
 	}

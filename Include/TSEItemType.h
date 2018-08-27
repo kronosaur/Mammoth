@@ -79,7 +79,15 @@ class CItemType : public CDesignType
 		inline void ClearKnown (void) { m_fKnown = false; }
 		inline void ClearShowReference (void) { m_fReference = false; }
 		void CreateEmptyFlotsam (CSystem *pSystem, const CVector &vPos, const CVector &vVel, CSovereign *pSovereign, CStation **retpFlotsam);
-		inline bool FindEventHandlerItemType (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandlerItemType (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const 
+			{
+			if (!m_CachedEvents[iEvent].pCode)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
+
 		ICCItem *FindItemTypeBaseProperty (CCodeChainCtx &Ctx, const CString &sProperty) const;
 		int GetApparentLevel (CItemCtx &Ctx) const;
 		CDeviceClass *GetAmmoLauncher (int *retiVariant = NULL) const;
@@ -130,6 +138,7 @@ class CItemType : public CDesignType
 		inline bool IsUsable (void) const { return GetUseDesc(NULL); }
 		inline void SetKnown (bool bKnown = true) { m_fKnown = bKnown; }
 		inline void SetShowReference (void) { m_fReference = true; }
+		inline bool ShowChargesInUseMenu (void) const { return (m_fShowChargesInUseMenu ? true : false); }
 		inline bool ShowReference (void) const { return (m_fReference ? true : false); }
 
 		//	CDesignType overrides
@@ -144,6 +153,7 @@ class CItemType : public CDesignType
 		static ItemCategories GetCategoryForNamedDevice (DeviceNames iDev);
 		static CString GetItemCategory (ItemCategories iCategory);
         static const SStdStats &GetStdStats (int iLevel);
+		static ALERROR ParseFate (SDesignLoadCtx &Ctx, const CString &sDesc, ItemFates *retiFate);
 		static bool ParseItemCategory (const CString &sCategory, ItemCategories *retCategory = NULL);
 
 	protected:
@@ -234,7 +244,7 @@ class CItemType : public CDesignType
 		DWORD m_fUseAsArmorSet:1;				//	If TRUE, we only show item once for armor set
 		DWORD m_fAmmoCharges:1;					//	If TRUE, charges are ammo
 		DWORD m_fNoSaleIfUsed:1;				//	If TRUE, cannot be sold once it's been used
-		DWORD m_fSpare8:1;
+		DWORD m_fShowChargesInUseMenu:1;		//	If TRUE, the use menu shows charges instead of a count.
 
 		DWORD m_dwSpare:16;
 
@@ -254,6 +264,8 @@ class CItemTable : public CDesignType
 		inline void AddItems (SItemAddCtx &Ctx) { if (m_pGenerator) m_pGenerator->AddItems(Ctx); }
 		inline CurrencyValue GetAverageValue (int iLevel) const { return (m_pGenerator ? m_pGenerator->GetAverageValue(iLevel) : 0); }
 		inline IItemGenerator *GetGenerator (void) { return m_pGenerator; }
+		inline CItemTypeProbabilityTable GetProbabilityTable (SItemAddCtx &Ctx) const { return m_pGenerator->GetProbabilityTable(Ctx); }
+		inline bool HasItemAttribute (const CString &sAttrib) const { return (m_pGenerator ? m_pGenerator->HasItemAttribute(sAttrib) : false); }
 
 		//	CDesignType overrides
 		static CItemTable *AsType (CDesignType *pType) { return ((pType && pType->GetType() == designItemTable) ? (CItemTable *)pType : NULL); }

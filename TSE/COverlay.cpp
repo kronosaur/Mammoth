@@ -346,9 +346,10 @@ void COverlay::FireCustomEvent (CSpaceObject *pSource, const CString &sEvent, IC
 	if (m_pType->FindEventHandler(sEvent, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		
 		//	Setup 
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineDataVar(pData);
 		Ctx.SaveAndDefineOverlayID(m_dwID);
@@ -368,7 +369,7 @@ void COverlay::FireCustomEvent (CSpaceObject *pSource, const CString &sEvent, IC
 		*retpResult = g_pUniverse->GetCC().CreateNil();
 	}
 
-bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, int *retiPriority, ICCItem **retpData) const
+bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, int *retiPriority, ICCItemPtr *retpData) const
 
 //	FireGetDockScreen
 //
@@ -376,57 +377,22 @@ bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, in
 
 	{
 	SEventHandlerDesc Event;
-
-	if (m_pType->FindEventHandler(EVENT_GET_DOCK_SCREEN, &Event))
-		{
-		CCodeChainCtx Ctx;
-		Ctx.SaveAndDefineSourceVar(pSource);
-		Ctx.SaveAndDefineOverlayID(m_dwID);
-
-		bool bResult;
-
-		ICCItem *pResult = Ctx.Run(Event);
-
-		//	Interpret results
-
-		if (pResult->IsError())
-			{
-			pSource->ReportEventError(EVENT_GET_DOCK_SCREEN, pResult);
-			bResult = false;
-			}
-		else if (pResult->IsNil())
-			bResult = false;
-		else if (pResult->GetCount() >= 3)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retpData) *retpData = pResult->GetElement(1)->Reference();
-			if (retiPriority) *retiPriority = pResult->GetElement(2)->GetIntegerValue();
-			bResult = true;
-			}
-		else if (pResult->GetCount() >= 2)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retiPriority) *retiPriority = pResult->GetElement(1)->GetIntegerValue();
-			if (retpData) *retpData = NULL;
-			bResult = true;
-			}
-		else if (pResult->GetCount() >= 1)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retiPriority) *retiPriority = 0;
-			if (retpData) *retpData = NULL;
-			bResult = true;
-			}
-		else
-			bResult = false;
-
-		//	Done
-
-		Ctx.Discard(pResult);
-		return bResult;
-		}
-	else
+	if (!m_pType->FindEventHandler(EVENT_GET_DOCK_SCREEN, &Event))
 		return false;
+
+	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
+	Ctx.SaveAndDefineSourceVar(pSource);
+	Ctx.SaveAndDefineOverlayID(m_dwID);
+
+	ICCItemPtr pResult = Ctx.RunCode(Event);
+	if (pResult->IsError())
+		{
+		pSource->ReportEventError(EVENT_GET_DOCK_SCREEN, pResult);
+		return false;
+		}
+
+	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
 	}
 
 void COverlay::FireOnCreate (CSpaceObject *pSource)
@@ -440,10 +406,11 @@ void COverlay::FireOnCreate (CSpaceObject *pSource)
 	if (m_pType->FindEventHandler(ON_CREATE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		
 		//	Setup 
 
 		Ctx.SetEvent(eventOverlayEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineOverlayID(m_dwID);
 
@@ -471,10 +438,11 @@ bool COverlay::FireOnDamage (CSpaceObject *pSource, SDamageCtx &Ctx)
 	if (m_pType->FindEventHandler(ON_DAMAGE_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		
 		//	Setup 
 
 		CCCtx.SetEvent(eventOverlayEvent);
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(pSource);
 		CCCtx.DefineDamageCtx(Ctx);
 		CCCtx.SaveAndDefineOverlayID(m_dwID);
@@ -521,6 +489,7 @@ void COverlay::FireOnDestroy (CSpaceObject *pSource)
 		//	Setup 
 
 		Ctx.SetEvent(eventOverlayEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineOverlayID(m_dwID);
 
@@ -552,6 +521,7 @@ void COverlay::FireOnObjDestroyed (CSpaceObject *pSource, const SDestroyCtx &Ctx
 		//	Setup
 
 		CCCtx.SetEvent(eventOverlayEvent);
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(pSource);
 		CCCtx.SaveAndDefineOverlayID(m_dwID);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
@@ -586,6 +556,7 @@ void COverlay::FireOnObjDocked (CSpaceObject *pSource, CSpaceObject *pShip) cons
 		CCodeChainCtx Ctx;
 
 		Ctx.SetEvent(eventOverlayEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineOverlayID(m_dwID);
 		Ctx.DefineSpaceObject(CONSTLIT("aObjDocked"), pShip);
@@ -613,6 +584,7 @@ void COverlay::FireOnUpdate (CSpaceObject *pSource)
 		//	Setup 
 
 		Ctx.SetEvent(eventOverlayEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineOverlayID(m_dwID);
 
@@ -627,6 +599,72 @@ void COverlay::FireOnUpdate (CSpaceObject *pSource)
 
 		Ctx.Discard(pResult);
 		}
+	}
+
+CConditionSet COverlay::GetConditions (CSpaceObject *pSource) const
+
+//	GetConditions
+//
+//	Returns the set of imparted conditions
+
+	{
+	CConditionSet Conditions;
+
+	//	Do we disarm the source?
+
+	if (Disarms(pSource))
+		Conditions.Set(CConditionSet::cndDisarmed);
+
+	//	Do we paralyze the source?
+
+	if (Paralyzes(pSource))
+		Conditions.Set(CConditionSet::cndParalyzed);
+
+	//	Can't bring up ship status
+
+	if (IsShipScreenDisabled())
+		Conditions.Set(CConditionSet::cndShipScreenDisabled);
+
+	//	Do we spin the source ?
+
+	if (Spins(pSource))
+		Conditions.Set(CConditionSet::cndSpinning);
+
+	//	Drag
+
+	if (GetDrag(pSource) < 1.0)
+		Conditions.Set(CConditionSet::cndDragged);
+
+	//	Time-stopped?
+
+	if (StopsTime(pSource))
+		Conditions.Set(CConditionSet::cndTimeStopped);
+
+	//	Done
+
+	return Conditions;
+	}
+
+bool COverlay::GetImpact (CSpaceObject *pSource, SImpactDesc &Impact) const
+
+//	GetImpact
+//
+//	Returns the impact of this overlay.
+
+	{
+	//	Conditions
+
+	Impact.Conditions = GetConditions(pSource);
+	bool bHasImpact = !Impact.Conditions.IsEmpty();
+
+	//	Get appy drag
+
+	if ((Impact.rDrag = GetDrag(pSource)) < 1.0)
+		bHasImpact = true;
+
+	//	Done
+
+	return bHasImpact;
 	}
 
 CVector COverlay::GetPos (CSpaceObject *pSource)
@@ -728,36 +766,8 @@ void COverlay::PaintAnnotations (CG32bitImage &Dest, int x, int y, SViewportPain
 	switch (m_pType->GetCounterStyle())
 		{
 		case COverlayType::counterFlag:
-			{
-			const CG16bitFont &CounterFont = g_pUniverse->GetNamedFont(CUniverse::fontSRSMessage);
-			const CG16bitFont &LabelFont = g_pUniverse->GetNamedFont(CUniverse::fontSRSObjCounter);
-
-			CG32bitPixel rgbColor = m_pType->GetCounterColor();
-			if (rgbColor.IsNull() && Ctx.pObj)
-				rgbColor = Ctx.pObj->GetSymbolColor();
-
-			//	Get the size of the object we're painting on.
-
-			int cyHalfHeight = (RectHeight(Ctx.pObj->GetImage().GetImageRect())) / 2;
-			int cyMast = cyHalfHeight + LabelFont.GetHeight() + CounterFont.GetHeight();
-
-			//	Paint the mast
-
-			int yTop = y - cyMast;
-			Dest.DrawLine(x, yTop, x, y, 1, rgbColor);
-
-			//	Paint the counter
-
-			int xText = x + FLAG_INNER_SPACING_X;
-			CounterFont.DrawText(Dest, xText, yTop, rgbColor, strFromInt(m_iCounter));
-
-			//	Paint the label
-
-			yTop += CounterFont.GetHeight();
-			LabelFont.DrawText(Dest, xText, yTop, rgbColor, m_sMessage);
-
+			PaintCounterFlag(Dest, x, y, strFromInt(m_iCounter), m_sMessage, m_pType->GetCounterColor(), Ctx);
 			break;
-			}
 
 		case COverlayType::counterProgress:
 			{
@@ -818,6 +828,44 @@ void COverlay::PaintBackground (CG32bitImage &Dest, int x, int y, SViewportPaint
 			break;
 			}
 		}
+	}
+
+void COverlay::PaintCounterFlag (CG32bitImage &Dest, int x, int y, const CString &sCounter, const CString &sLabel, CG32bitPixel rgbColor, SViewportPaintCtx &Ctx)
+
+//	PaintCounterFlag
+//
+//	Paints a counter flag.
+
+	{
+	const CG16bitFont &CounterFont = g_pUniverse->GetNamedFont(CUniverse::fontSRSMessage);
+	const CG16bitFont &LabelFont = g_pUniverse->GetNamedFont(CUniverse::fontSRSObjCounter);
+
+	if (rgbColor.IsNull() && Ctx.pObj)
+		rgbColor = Ctx.pObj->GetSymbolColor();
+
+	//	Get the size of the object we're painting on.
+
+	int cyHalfHeight = (RectHeight(Ctx.pObj->GetImage().GetImageRect())) / 2;
+	int cyMast = cyHalfHeight + LabelFont.GetHeight() + CounterFont.GetHeight();
+
+	//	Paint the mast
+
+	int yTop = y - cyMast;
+	int xText = x + FLAG_INNER_SPACING_X;
+
+	Dest.DrawLine(x, yTop, x, y, 1, rgbColor);
+
+	//	Paint the counter
+
+	if (!sCounter.IsBlank())
+		{
+		CounterFont.DrawText(Dest, xText, yTop, rgbColor, sCounter);
+		yTop += CounterFont.GetHeight();
+		}
+
+	//	Paint the label
+
+	LabelFont.DrawText(Dest, xText, yTop, rgbColor, sLabel);
 	}
 
 void COverlay::PaintLRSAnnotations (const ViewportTransform &Trans, CG32bitImage &Dest, int x, int y)

@@ -88,7 +88,15 @@ class CArmorClass
 		int CalcPowerUsed (SUpdateCtx &Ctx, CSpaceObject *pSource, CInstalledArmor *pArmor);
 		static ALERROR CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CItemType *pType, CArmorClass **retpArmor);
 		bool FindDataField (const CString &sField, CString *retsValue);
-		inline bool FindEventHandlerArmorClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandlerArmorClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const 
+			{
+			if (m_CachedEvents[iEvent].pCode == NULL)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
+
 		ICCItem *FindItemProperty (CItemCtx &Ctx, const CString &sProperty);
         inline ALERROR FinishBindDesign (SDesignLoadCtx &Ctx) { return NOERROR; }
 		inline int GetCompleteBonus (void) { return m_iArmorCompleteBonus; }
@@ -109,14 +117,9 @@ class CArmorClass
 		CString GetShortName (void);
 		inline int GetStealth (void) const { return m_iStealth; }
 		inline DWORD GetUNID (void);
-		bool IsBlindingDamageImmune (CItemCtx &ItemCtx);
-		bool IsDeviceDamageImmune (CItemCtx &ItemCtx);
-		bool IsDisintegrationImmune (CItemCtx &ItemCtx);
-		bool IsEMPDamageImmune (CItemCtx &ItemCtx);
-		bool IsRadiationImmune (CItemCtx &ItemCtx);
+		bool IsImmune (CItemCtx &ItemCtx, SpecialDamageTypes iSpecialDamage) const;
 		bool IsReflective (CItemCtx &ItemCtx, const DamageDesc &Damage);
         inline bool IsScalable (void) const { return (m_pScalable != NULL); }
-		bool IsShatterImmune (CItemCtx &ItemCtx);
 		bool IsShieldInterfering (CItemCtx &ItemCtx);
 		ALERROR OnBindDesign (SDesignLoadCtx &Ctx);
 		void Update (CItemCtx &ItemCtx, SUpdateCtx &UpdateCtx, int iTick, bool *retbModified);
@@ -130,6 +133,7 @@ class CArmorClass
         static const SStdStats &GetStdStats (int iLevel);
 
 	private:
+
         struct SScalableStats
             {
             int iLevel;
@@ -149,7 +153,9 @@ class CArmorClass
             CCurrencyAndValue RepairCost;
             CCurrencyAndValue InstallCost;
 
-            DWORD fRadiationImmune : 1;
+            DWORD fRadiationImmune:1;
+            DWORD fDisintegrationImmune:1;
+            DWORD fShatterImmune:1;
             };
 
 		CArmorClass (void);
@@ -192,9 +198,8 @@ class CArmorClass
 
 		DWORD m_fPhotoRecharge:1;				//	TRUE if refuels when near a star
 		DWORD m_fShieldInterference:1;			//	TRUE if armor interferes with shields
-		DWORD m_fDisintegrationImmune:1;		//	TRUE if immune to disintegration
-		DWORD m_fShatterImmune:1;				//	TRUE if immune to shatter
 		DWORD m_fChargeDecay:1;					//	If TRUE, we decay while we have charges left
+		DWORD m_fSpare4:1;
 		DWORD m_fSpare5:1;
 		DWORD m_fSpare6:1;
 		DWORD m_fSpare7:1;
@@ -204,7 +209,7 @@ class CArmorClass
 
 		CItemType *m_pItemType;					//	Item for this armor
 
-        int m_iScaledLevels;                    //  Number of levels
+        int m_iScaledLevels;                    //  Number of levels above first
         SScalableStats *m_pScalable;            //  Params for higher level versions of this armor
 
 		SEventHandlerDesc m_CachedEvents[evtCount];

@@ -32,6 +32,7 @@
 
 const int DEFAULT_PORT_POS_RADIUS =				64;
 const int DEFAULT_DOCK_DISTANCE_LS =			12;
+const Metric DEFAULT_DOCK_DISTANCE2 =			(LIGHT_SECOND * LIGHT_SECOND * DEFAULT_DOCK_DISTANCE_LS * DEFAULT_DOCK_DISTANCE_LS);
 const Metric GATE_DIST =						KLICKS_PER_PIXEL * 64.0;
 const Metric GATE_DIST2 =						GATE_DIST * GATE_DIST;
 
@@ -482,11 +483,15 @@ void CDockingPorts::InitPortsFromXML (CSpaceObject *pOwner, CXMLElement *pElemen
 	if (pDockingPorts)
 		{
 		//	Initialize max dist
+		//
 		//	NOTE: pOwner can be NULL because sometimes we init ports from a ship class 
 		//	(without an object).
+		//
+		//	NOTE: This is the max distance from a docking port, not from the center of
+		//	the station, so we don't have to change the defaults for different sized
+		//	stations.
 
-		int iDefaultDist = Max(DEFAULT_DOCK_DISTANCE_LS, (pOwner ? 8 + (int)((pOwner->GetBoundsRadius() / LIGHT_SECOND) + 0.5) : 0));
-		m_iMaxDist = pDockingPorts->GetAttributeIntegerBounded(MAX_DIST_ATTRIB, 1, -1, iDefaultDist);
+		m_iMaxDist = pDockingPorts->GetAttributeIntegerBounded(MAX_DIST_ATTRIB, 1, -1, DEFAULT_DOCK_DISTANCE_LS);
 
 		//	Sometimes we specify x,y coordinate but want to convert to rotating 
 		//	polar coordinate.
@@ -528,7 +533,7 @@ void CDockingPorts::InitPortsFromXML (CSpaceObject *pOwner, CXMLElement *pElemen
 					if (iConvertRotation != -1)
 						{
 						if (iScale <= 0)
-							iScale = ((pOwner && !pOwner->GetImage().IsEmpty()) ? pOwner->GetImage().GetImageViewportSize() : 512);
+							iScale = (pOwner ? pOwner->GetImageScale() : 512);
 
 						m_pPort[i].Pos.InitFromXY(iScale, vDockPos, pPort->GetAttributeInteger(POS_Z_ATTRIB));
 
@@ -622,7 +627,7 @@ void CDockingPorts::InitXYPortPos (CSpaceObject *pOwner, int iScale) const
 	//	and have not yet assigned an image.
 
 	if (iScale <= 0)
-		iScale = ((pOwner && !pOwner->GetImage().IsEmpty()) ? pOwner->GetImage().GetImageViewportSize() : 512);
+		iScale = (pOwner ? pOwner->GetImageScale() : 512);
 
 	//	Compute coordinates for each port
 
@@ -829,7 +834,7 @@ void CDockingPorts::RepairAll (CSpaceObject *pOwner, int iRepairRate)
 					&& !pOwner->IsEnemy(m_pPort[i].pObj))
 				{
 				m_pPort[i].pObj->RepairDamage(iRepairRate);
-				m_pPort[i].pObj->Decontaminate();
+				m_pPort[i].pObj->ClearCondition(CConditionSet::cndRadioactive);
 				m_pPort[i].pObj->ScrapeOverlays();
 				}
 		}
@@ -987,11 +992,6 @@ void CDockingPorts::UpdateAll (SUpdateCtx &Ctx, CSpaceObject *pOwner)
 	if (pPlayer && pPlayer->IsEnemy(pOwner) && !pOwner->IsAbandoned())
 		pPlayer = NULL;
 
-	//	Don't bother checking if the station is too far
-
-	if (pPlayer && rDist2 > rMaxDist2)
-		pPlayer = NULL;
-
 	//	If this is a stargate and we are at the center (just came through) 
 	//	then don't bother showing docking ports.
 
@@ -1002,6 +1002,15 @@ void CDockingPorts::UpdateAll (SUpdateCtx &Ctx, CSpaceObject *pOwner)
 
 	if (pPlayer && !pOwner->SupportsDockingFast())
 		pPlayer = NULL;
+
+	//	Don't bother checking if the station is too far
+
+	if (pPlayer)
+		{
+		Metric rMaxRadius = (0.5 * pOwner->GetHitSize()) + (LIGHT_SECOND * m_iMaxDist);
+		if (rDist2 > rMaxRadius * rMaxRadius)
+			pPlayer = NULL;
+		}
 
 	//	Loop over all ports
 
@@ -1033,8 +1042,8 @@ void CDockingPorts::UpdateAll (SUpdateCtx &Ctx, CSpaceObject *pOwner)
 				//	If this is a better port, then replace the existing 
 				//	solution.
 
-				if (Ctx.pDockingObj == NULL
-							|| rDist2 < Ctx.rDockingPortDist2)
+				if (rDist2 <= rMaxDist2
+						&& (Ctx.pDockingObj == NULL || rDist2 < Ctx.rDockingPortDist2))
 					{
 					Ctx.pDockingObj = pOwner;
 					Ctx.iDockingPort = i;
@@ -1183,6 +1192,36 @@ void CDockingPorts::UpdateDockingManeuvers (CSpaceObject *pOwner, SDockingPort &
 		}
 
 	DEBUG_CATCH
+	}
+
+void CDockingPorts::UpdatePortsFromXML (CSpaceObject *pOwner, CXMLElement *pElement, int iScale)
+
+//	UpdatePortsFromXML
+//
+//	Updates the port positions in case they changed.
+
+	{
+	int i;
+
+	CDockingPorts NewPorts;
+	NewPorts.InitPortsFromXML(pOwner, pElement, iScale);
+
+	int iCount = Min(NewPorts.GetPortCount(), GetPortCount());
+	for (i = 0; i < iCount; i++)
+		{
+		m_pPort[i].Pos = NewPorts.m_pPort[i].Pos;
+		m_pPort[i].iLayer = NewPorts.m_pPort[i].iLayer;
+		m_pPort[i].iRotation = NewPorts.m_pPort[i].iRotation;
+		m_pPort[i].vPos = NewPorts.m_pPort[i].vPos;
+
+		//	LATER: We need to update the position of the actual ship docked
+		//	here. Unfortunately, if we call this at load time we won't yet have
+		//	the ship object pointer. We'll have to call this at a later point
+		//	(or fix up the ships at a later point).
+		}
+
+	m_iMaxDist = NewPorts.m_iMaxDist;
+	m_iLastRotation = NewPorts.m_iLastRotation;
 	}
 
 void CDockingPorts::WriteToStream (CSpaceObject *pOwner, IWriteStream *pStream)

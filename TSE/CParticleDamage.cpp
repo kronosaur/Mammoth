@@ -495,7 +495,6 @@ void CParticleDamage::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 	EffectCtx.iTotalParticleCount = m_iParticleCount;
 	EffectCtx.pEnhancements = m_pEnhancements;
 	EffectCtx.iCause = m_Source.GetCause();
-	EffectCtx.bAutomatedWeapon = IsAutomatedWeapon();
 	EffectCtx.Attacker = m_Source;
 	EffectCtx.pTarget = m_pTarget;
 
@@ -626,7 +625,7 @@ void CParticleDamage::OnWriteToStream (IWriteStream *pStream)
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 	}
 
-bool CParticleDamage::PointInObject (const CVector &vObjPos, const CVector &vPointPos)
+bool CParticleDamage::PointInObject (const CVector &vObjPos, const CVector &vPointPos) const
 
 //	PointInObject
 //

@@ -42,6 +42,7 @@ enum NounPhraseFlags
 	nounTokenize			= 0x00020000,	//	Replace whitespace with underscores
 	nounNoDeterminer		= 0x00040000,	//	No count or article, but pluralize if count > 1
 	nounNoQuotes			= 0x00080000,	//	Convert double-quotes to single-quotes (for use inside quoted text)
+	nounEscapeQuotes		= 0x00100000,	//	Convert double-quotes to escaped double-quotes
 	};
 
 class CLanguage
@@ -54,6 +55,7 @@ class CLanguage
 
 			numberInteger,					//	1,000,000
 			numberPower,					//	1.1 MW
+			numberReal,						//	100 or 10.0 or 1.0 or 0.00
 			numberRegenRate,				//	1.0 hp/sec
 			numberSpeed,					//	.05c
 			};
@@ -61,6 +63,19 @@ class CLanguage
 		enum EVerbFlags
 			{
 			verbPluralize =					0x00000001,	//	Use the plural form of the verb
+			};
+
+		enum ELabelAttribs
+			{
+			specialNone			= 0x00000000,
+			specialAll			= 0xFFFFFFFF,
+
+			specialCancel		= 0x00000001,
+			specialDefault		= 0x00000002,
+			specialNextKey		= 0x00000004,
+			specialPrevKey		= 0x00000008,
+			specialPgDnKey		= 0x00000010,
+			specialPgUpKey		= 0x00000020,
 			};
 
 		struct SNounDesc
@@ -73,13 +88,17 @@ class CLanguage
 			bool bHasQuotes;				//	Noun has embedded quotes
 			};
 
+		static CString Compose (const CString &sString, ICCItem *pArgs);
+		static CString ComposeGenderedWord (const CString &sWord, GenomeTypes iGender);
 		static CString ComposeNounPhrase (const CString &sNoun, int iCount, const CString &sModifier, DWORD dwNounFlags, DWORD dwComposeFlags);
 		static CString ComposeNumber (ENumberFormatTypes iFormat, int iNumber);
 		static CString ComposeNumber (ENumberFormatTypes iFormat, Metric rNumber);
 		static CString ComposeNumber (ENumberFormatTypes iFormat, ICCItem *pNumber);
 		static CString ComposeVerb (const CString &sVerb, DWORD dwVerbFlags);
+		static bool FindGenderedWord (const CString &sWord, GenomeTypes iGender, CString *retsResult = NULL);
 		static DWORD LoadNameFlags (CXMLElement *pDesc);
 		static void ParseItemName (const CString &sName, CString *retsRoot, CString *retsModifiers);
+		static void ParseLabelDesc (const CString &sLabelDesc, CString *retsLabel, CString *retsKey = NULL, int *retiKey = NULL, TArray<ELabelAttribs> *retAttribs = NULL);
 		static DWORD ParseNounFlags (const CString &sValue);
 		static CString ParseNounForm (const CString &sNoun, const CString &sModifier, DWORD dwNounFlags, bool bPluralize, bool bShortName, SNounDesc *retDesc = NULL);
 		static ENumberFormatTypes ParseNumberFormat (const CString &sValue);
@@ -88,6 +107,13 @@ class CLanguage
 class CLanguageDataBlock
 	{
 	public:
+		struct SEntryDesc
+			{
+			CString sID;
+			CString sText;
+			ICCItemPtr pCode;
+			};
+
 		CLanguageDataBlock (void) { }
 		CLanguageDataBlock (const CLanguageDataBlock &Src) { Copy(Src); }
 		~CLanguageDataBlock (void) { CleanUp(); }
@@ -96,6 +122,8 @@ class CLanguageDataBlock
 
 		void AddEntry (const CString &sID, const CString &sText);
 		void DeleteAll (void);
+		inline int GetCount (void) const { return m_Data.GetCount(); }
+		SEntryDesc GetEntry (int iIndex) const;
 		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc);
 		inline bool IsEmpty (void) const { return (m_Data.GetCount() == 0); }
 		void MergeFrom (const CLanguageDataBlock &Source);
@@ -122,7 +150,7 @@ class CLanguageDataBlock
 			};
 
 		inline void CleanUp (void) { DeleteAll(); }
-		ICCItem *ComposeCCItem (CCodeChain &CC, ICCItem *pValue, const CString &sPlayerName, GenomeTypes iPlayerGenome, ICCItem *pData) const;
+		ICCItem *ComposeCCItem (CCodeChain &CC, ICCItem *pValue, ICCItem *pData) const;
 		ETranslateResult ComposeResult (ICCItem *pResult, ICCItem *pData, TArray<CString> *retText, CString *retsText, ICCItem **retpResult = NULL) const;
 		bool ComposeTextResult (ETranslateResult iResult, const TArray<CString> &List, CString *retsText) const;
 		void Copy (const CLanguageDataBlock &Src);
@@ -157,4 +185,30 @@ class CNameDesc
 		TArray<CString> m_Names;						//	List of name patterns.
 		DWORD m_dwNameFlags;							//	For backwards compatibility.
 		mutable int m_iNamesGenerated;					//	Number of names generated so far.
+	};
+
+class CVirtualKeyData
+	{
+	public:
+		static constexpr DWORD FLAG_NON_STANDARD =			0x00000001;	//	Not available in keyboard UI
+		static constexpr DWORD FLAG_SPECIAL_KEY =			0x00000002;	//	Custom VK code
+
+		static constexpr DWORD INVALID_VIRT_KEY = 0xFFFFFFFF;
+		static constexpr DWORD VK_NUMPAD_ENTER = 0xE0;
+
+		static DWORD GetKey (const CString &sKey);
+		static DWORD GetKeyFlags (DWORD dwVirtKey);
+		static CString GetKeyID (DWORD dwVirtKey);
+		static CString GetKeyLabel (DWORD dwVirtKey);
+		static DWORD TranslateVirtKey (DWORD dwVirtKey, DWORD dwKeyData);
+
+	private:
+		struct SVirtKeyData
+			{
+			char *pszName;
+			char *pszLabel;
+			DWORD dwFlags;
+			};
+
+		static SVirtKeyData m_VirtKeyData[256];
 	};

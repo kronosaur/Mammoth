@@ -34,6 +34,24 @@ CSpaceObjectGrid::~CSpaceObjectGrid (void)
 	delete [] m_pGrid;
 	}
 
+void CSpaceObjectGrid::Delete (CSpaceObject *pObj)
+
+//	Delete
+//
+//	Delete the given object from the grid. NOTE: This is a relatively expensive
+//	operation, so we only do it when we really need to.
+
+	{
+	int i;
+	int iTotal = m_iGridSize * m_iGridSize;
+	for (i = 0; i < iTotal; i++)
+		{
+		if (m_pGrid[i].Delete(pObj))
+			//	We assume that an object can only be on one list in the grid.
+			break;
+		}
+	}
+
 void CSpaceObjectGrid::DeleteAll (void)
 
 //	DeleteAll
@@ -48,7 +66,7 @@ void CSpaceObjectGrid::DeleteAll (void)
 	m_Outer.DeleteAll();
 	}
 
-bool CSpaceObjectGrid::GetGridCoord (const CVector &vPos, int *retx, int *rety)
+bool CSpaceObjectGrid::GetGridCoord (const CVector &vPos, int *retx, int *rety) const
 
 //	GetGridCoord
 //
@@ -63,6 +81,23 @@ bool CSpaceObjectGrid::GetGridCoord (const CVector &vPos, int *retx, int *rety)
 	*rety = y;
 
 	return (x >= 0 && y >= 0 && x < m_iGridSize && y < m_iGridSize);
+	}
+
+const CSpaceObjectList &CSpaceObjectGrid::GetList (const CVector &vPos) const
+
+//	GetList
+//
+//	Returns the object list at the given position
+
+	{
+	CVector vGridPos = vPos - m_vLL;
+	int x = (int)(vGridPos.GetX() / m_rCellSize);
+	int y = (int)(vGridPos.GetY() / m_rCellSize);
+
+	if (x < 0 || y < 0 || x >= m_iGridSize || y >= m_iGridSize)
+		return m_Outer;
+	else
+		return GetList(x, y);
 	}
 
 CSpaceObjectList &CSpaceObjectGrid::GetList (const CVector &vPos)
@@ -82,7 +117,7 @@ CSpaceObjectList &CSpaceObjectGrid::GetList (const CVector &vPos)
 		return GetList(x, y);
 	}
 
-void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags)
+void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags) const
 
 //	EnumStart
 //
@@ -113,7 +148,7 @@ void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &
 	//	Generate a list of all grid cells to traverse
 
 	int iMaxSize = (xEnd - xStart + 1) * (yEnd - yStart + 1);
-	i.pGridIndexList = new CSpaceObjectList * [iMaxSize];
+	i.pGridIndexList = new const CSpaceObjectList * [iMaxSize];
 	i.iGridIndexCount = 0;
 	bool bOuterAdded = (m_Outer.GetCount() == 0);
 
@@ -123,7 +158,7 @@ void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &
 	int yCenter = yStart + (yEnd - yStart) / 2;
 	if (xCenter >= 0 && yCenter >= 0 && xCenter < m_iGridSize && yCenter < m_iGridSize)
 		{
-		CSpaceObjectList *pList = &GetList(xCenter, yCenter);
+		const CSpaceObjectList *pList = &GetList(xCenter, yCenter);
 		if (pList->GetCount() > 0)
 			i.pGridIndexList[i.iGridIndexCount++] = pList;
 		}
@@ -141,7 +176,7 @@ void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &
 				NULL;
 			else if (x >= 0 && y >= 0 && x < m_iGridSize && y < m_iGridSize)
 				{
-				CSpaceObjectList *pList = &GetList(x, y);
+				const CSpaceObjectList *pList = &GetList(x, y);
 				if (pList->GetCount() > 0)
 					i.pGridIndexList[i.iGridIndexCount++] = pList;
 				}
@@ -174,7 +209,7 @@ void CSpaceObjectGrid::EnumStart (SSpaceObjectGridEnumerator &i, const CVector &
 	DEBUG_CATCH
 	}
 
-CSpaceObject *CSpaceObjectGrid::EnumGetNext (SSpaceObjectGridEnumerator &i)
+CSpaceObject *CSpaceObjectGrid::EnumGetNext (SSpaceObjectGridEnumerator &i) const
 
 //	EnumGetNext
 //
@@ -225,7 +260,7 @@ CSpaceObject *CSpaceObjectGrid::EnumGetNext (SSpaceObjectGridEnumerator &i)
 	DEBUG_CATCH
 	}
 
-CSpaceObject *CSpaceObjectGrid::EnumGetNextInBoxPoint (SSpaceObjectGridEnumerator &i)
+CSpaceObject *CSpaceObjectGrid::EnumGetNextInBoxPoint (SSpaceObjectGridEnumerator &i) const
 
 //	EnumGetNextInBoxPoint
 //
@@ -270,7 +305,7 @@ CSpaceObject *CSpaceObjectGrid::EnumGetNextInBoxPoint (SSpaceObjectGridEnumerato
 	while (true);
 	}
 
-bool CSpaceObjectGrid::EnumGetNextList (SSpaceObjectGridEnumerator &i)
+bool CSpaceObjectGrid::EnumGetNextList (SSpaceObjectGridEnumerator &i) const
 
 //	EnumGetNextList
 //
@@ -319,7 +354,7 @@ void CSpaceObjectGrid::GetObjectsInBox (const CVector &vUR, const CVector &vLL, 
 	for (y = yLL; y <= yUR; y++)
 		for (x = xLL; x <= xUR; x++)
 			{
-			CSpaceObjectList *pList;
+			const CSpaceObjectList *pList;
 			if (x >= 0 && y >= 0 && x < m_iGridSize && y < m_iGridSize)
 				pList = &GetList(x, y);
 			else if (bCheckOuter)

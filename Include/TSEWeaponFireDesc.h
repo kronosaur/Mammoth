@@ -6,6 +6,7 @@
 #pragma once
 
 class CParticleSystemDesc;
+class CWeaponFireDesc;
 
 enum SpecialDamageTypes
 	{
@@ -28,6 +29,8 @@ enum SpecialDamageTypes
 	specialArmor			= 13,
 	specialSensor			= 14,
 	specialShieldPenetrator	= 15,
+
+	specialTimeStop			= 16,
 	};
 
 class DamageDesc
@@ -67,6 +70,7 @@ class DamageDesc
 				m_SensorDamage(0),
 				m_ShieldDamage(0),
 				m_ArmorDamage(0),
+				m_TimeStopDamage(0),
 				m_WormholeDamage(0),
 				m_FuelDamage(0),
 				m_fNoSRSFlash(0),
@@ -79,7 +83,6 @@ class DamageDesc
 				m_dwSpare2(0)
 			{ }
 
-		inline void AddBonus (int iBonus) { m_iBonus += iBonus; }
 		void AddEnhancements (const CItemEnhancementStack *pEnhancements);
 		inline bool CausesSRSFlash (void) const { return (m_fNoSRSFlash ? false : true); }
 		ICCItem *FindProperty (const CString &sName) const;
@@ -120,6 +123,8 @@ class DamageDesc
 		inline int GetShatterDamage (void) const { return (int)m_ShatterDamage; }
 		inline int GetShieldDamageLevel (void) const { return (int)m_ShieldDamage; }
 		inline int GetShieldPenetratorAdj (void) const { return (int)(m_ShieldPenetratorAdj ? (2 * (m_ShieldPenetratorAdj * m_ShieldPenetratorAdj) + 2) : 0); }
+		inline int GetTimeStopDamageLevel (void) const { return (int)m_TimeStopDamage; }
+		int GetTimeStopResistChance (int iTargetLevel) const;
 
 		static SpecialDamageTypes ConvertPropertyToSpecialDamageTypes (const CString &sValue);
 		static SpecialDamageTypes ConvertToSpecialDamageTypes (const CString &sValue);
@@ -129,6 +134,7 @@ class DamageDesc
         static int GetMassDestructionLevelFromValue (int iValue);
 
 	private:
+		inline void AddBonus (int iBonus) { m_iBonus += iBonus; }
 		ALERROR LoadTermFromXML (SDesignLoadCtx &Ctx, const CString &sType, const CString &sArg);
 		ALERROR ParseTerm (SDesignLoadCtx &Ctx, char *pPos, CString *retsKeyword, CString *retsValue, char **retpPos);
 
@@ -160,7 +166,7 @@ class DamageDesc
 
 		BYTE m_ShieldDamage;					//	Shield damage (level)	shield:level
 		BYTE m_ArmorDamage;						//	Armor damage (level)
-		BYTE m_Spare2;
+		BYTE m_TimeStopDamage;					//	Time stop (level)
 		BYTE m_Spare3;
 	};
 
@@ -175,109 +181,121 @@ enum EDamageResults
 	damagePassthroughDestroyed =	6,	//	Target destroyed, but we pass through
 	damageDestroyedAbandoned =		7,	//	Station was abandoned, but object not destroyed
 	damageNoDamageNoPassthrough =	8,	//	No damage; stop any passthrough
+	damageDisintegrated =			9,
+	damageShattered =				10,
 
-	damageResultCount =				9,
+	damageResultCount =				11,
 	};
 
 struct SDamageCtx
 	{
-	SDamageCtx (void) :
-			pObj(NULL),
-			pDesc(NULL),
-			iDirection(-1),
-			pCause(NULL),
-			bNoHitEffect(false),
-			bIgnoreOverlays(false),
-			bIgnoreShields(false),
-			iDamage(0),
-			iSectHit(-1),
-			iOverlayHitDamage(0),
-			iShieldHitDamage(0),
-			iArmorHitDamage(0),
-			iHPLeft(0),
-			iAbsorb(0),
-			iShieldDamage(0),
-			iOriginalAbsorb(0),
-			iOriginalShieldDamage(0),
-			iArmorAbsorb(0),
-			iArmorDamage(0),
-			bBlind(false),
-			iBlindTime(0),
-			bDeviceDisrupt(false),
-			iDisruptTime(0),
-			bDeviceDamage(false),
-			bDisintegrate(false),
-			bParalyze(false),
-			iParalyzeTime(0),
-			bRadioactive(false),
-			bReflect(false),
-			bShatter(false)
-		{ }
+	public:
+		SDamageCtx (void) { }
+		SDamageCtx (CSpaceObject *pObjHitArg, 
+				CWeaponFireDesc *pDescArg, 
+				const CItemEnhancementStack *pEnhancementsArg, 
+				CDamageSource &AttackerArg, 
+				CSpaceObject *pCauseArg, 
+				int iDirectionArg, 
+				const CVector &vHitPosArg,
+				int iDamageArg = -1);
+		SDamageCtx (const DamageDesc &DamageArg);
+		~SDamageCtx (void);
 
-	inline CSpaceObject *GetOrderGiver (void) const { return Attacker.GetOrderGiver(); }
+		inline void ClearTimeStop (void) { m_bTimeStop = false; }
+		inline int GetBlindTime (void) const { return m_iBlindTime; }
+		inline int GetDeviceDisruptTime (void) const { return m_iDisruptTime; }
+		inline CSpaceObject *GetOrderGiver (void) const { return Attacker.GetOrderGiver(); }
+		inline int GetParalyzedTime (void) const { return m_iParalyzeTime; }
+		inline bool IsBlinded (void) const { return m_bBlind; }
+		inline bool IsDeviceDamaged (void) const { return m_bDeviceDamage; }
+		inline bool IsDeviceDisrupted (void) const { return m_bDeviceDisrupt; }
+		inline bool IsDisintegrated (void) const { return m_bDisintegrate; }
+		inline bool IsParalyzed (void) const { return m_bParalyze; }
+		inline bool IsRadioactive (void) const { return m_bRadioactive; }
+		inline bool IsShattered (void) const { return m_bShatter; }
+		inline bool IsShotReflected (void) const { return m_bReflect; }
+		inline bool IsTimeStopped (void) const { return m_bTimeStop; }
+		inline void SetBlinded (bool bValue = true) { m_bBlind = bValue; }
+		inline void SetBlindedTime (int iTime) { m_iBlindTime = iTime; }
+		inline void SetDeviceDamaged (bool bValue = true) { m_bDeviceDamage = bValue; }
+		inline void SetDeviceDisrupted (bool bValue = true) { m_bDeviceDisrupt = bValue; }
+		inline void SetDeviceDisruptedTime (int iTime) { m_iDisruptTime = iTime; }
+		inline void SetDisintegrated (bool bValue = true) { m_bDisintegrate = bValue; }
+		inline void SetParalyzed (bool bValue = true) { m_bParalyze = bValue; }
+		inline void SetParalyzedTime (int iTime) { m_iParalyzeTime = iTime; }
+		inline void SetRadioactive (bool bValue = true) { m_bRadioactive = bValue; }
+		inline void SetShattered (bool bValue = true) { m_bShatter = bValue; }
+		inline void SetShotReflected (bool bValue = true) { m_bReflect = bValue; }
+		inline void SetTimeStopped (bool bValue = true) { m_bTimeStop = bValue; }
 
-	CSpaceObject *pObj;							//	Object hit
-	CWeaponFireDesc *pDesc;						//	WeaponFireDesc
-	DamageDesc Damage;							//	Damage
-	int iDirection;								//	Direction that hit came from
-	CVector vHitPos;							//	Hit at this position
-	CSpaceObject *pCause;						//	Object that directly caused the damage
-	CDamageSource Attacker;						//	Ultimate attacker
-	bool bNoHitEffect;							//	No hit effect
-	bool bIgnoreOverlays;						//	Start damage at shields
-	bool bIgnoreShields;						//	Start damage at armor
+		CSpaceObject *pObj = NULL;					//	Object hit
+		CWeaponFireDesc *pDesc = NULL;				//	WeaponFireDesc
+		DamageDesc Damage;							//	Damage
+		int iDirection = -1;						//	Direction that hit came from
+		CVector vHitPos;							//	Hit at this position
+		CSpaceObject *pCause = NULL;				//	Object that directly caused the damage
+		CDamageSource Attacker;						//	Ultimate attacker
+		bool bNoHitEffect = false;					//	No hit effect
+		bool bIgnoreOverlays = false;				//	Start damage at shields
+		bool bIgnoreShields = false;				//	Start damage at armor
 
-	int iDamage;								//	Damage hp
-	int iSectHit;								//	Armor section hit on object
+		int iDamage = 0;							//	Damage hp
+		int iSectHit = -1;							//	Armor section hit on object
 
-	//	These are some results
-	int iOverlayHitDamage;						//	HP that hit overlays
-	int iShieldHitDamage;						//	HP that hit shields
-	int iArmorHitDamage;						//	HP that hit armor
+		//	These are some results
+		int iOverlayHitDamage = 0;					//	HP that hit overlays
+		int iShieldHitDamage = 0;					//	HP that hit shields
+		int iArmorHitDamage = 0;					//	HP that hit armor
 
-	//	These are used within armor/shield processing
-	int iHPLeft;								//	HP left on shields (before damage)
-	int iAbsorb;								//	Damage absorbed by shields
-	int iShieldDamage;							//	Damage taken by shields
-	int iOriginalAbsorb;						//	Computed absorb value, if shot had not been reflected
-	int iOriginalShieldDamage;					//	Computed shield damage value, if shot had not been reflected
-	int iArmorAbsorb;							//	Damage absorbed by armor
-	int iArmorDamage;							//	Damage taken by armor
+		//	These are used within armor/shield processing
+		int iHPLeft = 0;							//	HP left on shields (before damage)
+		int iAbsorb = 0;							//	Damage absorbed by shields
+		int iShieldDamage = 0;						//	Damage taken by shields
+		int iOriginalAbsorb = 0;					//	Computed absorb value, if shot had not been reflected
+		int iOriginalShieldDamage = 0;				//	Computed shield damage value, if shot had not been reflected
+		int iArmorAbsorb = 0;						//	Damage absorbed by armor
+		int iArmorDamage = 0;						//	Damage taken by armor
 
-	//	Damage effects
-	bool bBlind;								//	If true, shot will blind the target
-	int iBlindTime;
-	bool bDeviceDisrupt;						//	If true, shot will disrupt devices
-	int iDisruptTime;
-	bool bDeviceDamage;							//	If true, shot will damage devices
-	bool bDisintegrate;							//	If true, shot will disintegrate target
-	bool bParalyze;								//	If true, shot will paralyze the target
-	int iParalyzeTime;
-	bool bRadioactive;							//	If true, shot will irradiate the target
-	bool bReflect;								//	If true, armor/shields reflected the shot
-	bool bShatter;								//	If true, shot will shatter the target
+	private:
+		void InitDamageEffects (const DamageDesc &DamageArg);
+
+        //  Copying this class is not supported
+
+		SDamageCtx (const SDamageCtx &Src) = delete;
+        SDamageCtx & operator= (const SDamageCtx &Src) = delete;
+
+		//	Damage effects
+
+		bool m_bBlind = false;						//	If true, shot will blind the target
+		int m_iBlindTime = 0;
+		bool m_bDeviceDisrupt = false;				//	If true, shot will disrupt devices
+		int m_iDisruptTime = 0;
+		bool m_bDeviceDamage = false;				//	If true, shot will damage devices
+		bool m_bDisintegrate = false;				//	If true, shot will disintegrate target
+		bool m_bParalyze = false;					//	If true, shot will paralyze the target
+		int m_iParalyzeTime = 0;
+		bool m_bRadioactive = false;				//	If true, shot will irradiate the target
+		bool m_bReflect = false;					//	If true, armor/shields reflected the shot
+		bool m_bShatter = false;					//	If true, shot will shatter the target
+		bool m_bTimeStop = false;					//	If TRUE, target will be stopped in time
+
+		bool m_bFreeDesc = false;					//	If TRUE, we own pDesc.
 	};
 
 struct SDestroyCtx
 	{
-	SDestroyCtx (void) :
-		pObj(NULL),
-		pWreck(NULL),
-		iCause(removedFromSystem),
-		bResurrectPending(false),
-		bRemovedByOwner(false),
-		pResurrectedObj(NULL) { }
-
 	CSpaceObject *GetOrderGiver (void) const;
 
-	CSpaceObject *pObj;							//	Object destroyed
-	CDamageSource Attacker;						//	Ultimate attacker
-	CSpaceObject *pWreck;						//	Wreck left behind
-	DestructionTypes iCause;					//	Cause of damage
+	CSpaceObject *pObj = NULL;						//	Object destroyed
+	CWeaponFireDesc *pDesc = NULL;					//	WeaponFireDesc
+	CDamageSource Attacker;							//	Ultimate attacker
+	CSpaceObject *pWreck = NULL;					//	Wreck left behind
+	DestructionTypes iCause = removedFromSystem;	//	Cause of damage
 
-	bool bResurrectPending;						//	TRUE if this object will be resurrected
-	bool bRemovedByOwner;						//	TRUE if this is an attached obj removed by its parent
-	CSpaceObject *pResurrectedObj;				//	Pointer to resurrected object
+	bool bResurrectPending = false;					//	TRUE if this object will be resurrected
+	bool bRemovedByOwner = false;					//	TRUE if this is an attached obj removed by its parent
+	CSpaceObject *pResurrectedObj = NULL;			//	Pointer to resurrected object
 	};
 
 class DamageTypeSet
@@ -295,6 +313,30 @@ class DamageTypeSet
 		DWORD m_dwSet;
 	};
 
+struct SShotCreateCtx
+	{
+	enum Flags
+		{
+		//	CreateWeaponFire flags
+		CWF_WEAPON_FIRE =				0x00000001,	//	Creating a shot from a weapon
+		CWF_FRAGMENT =					0x00000002,	//	Creating a fragment
+		CWF_EXPLOSION =					0x00000004,	//	Creating an explosion (or fragment of an explosion)
+		CWF_EJECTA =					0x00000008,	//	Creating ejecta (or fragments of ejecta)
+		CWF_REPEAT =					0x00000010,	//	Mixed with CWF_WEAPON_FIRE to indicate this is a repeat
+		CWF_PRIMARY =					0x00000020,	//	The first shot in a multi-shot weapon
+		};
+
+	CWeaponFireDesc *pDesc = NULL;
+	TSharedPtr<CItemEnhancementStack> pEnhancements;
+	CDamageSource Source;
+	CVector vPos;
+	CVector vVel;
+	int iDirection = 0;
+	int iRepeatingCount = 0;
+	CSpaceObject *pTarget = NULL;
+	DWORD dwFlags = 0;
+	};
+
 //	WeaponFireDesc
 
 enum FireTypes
@@ -309,9 +351,9 @@ enum FireTypes
 
 struct SExplosionType
 	{
-	CWeaponFireDesc *pDesc;				//	Explosion type
-	int iBonus;							//	Bonus damage
-	DestructionTypes iCause;			//	Cause
+	CWeaponFireDesc *pDesc = NULL;					//	Explosion type
+	int iBonus = 0;									//	Bonus damage
+	DestructionTypes iCause = killedByExplosion;	//	Cause
 	};
 
 class CWeaponFireDesc
@@ -393,7 +435,7 @@ class CWeaponFireDesc
         inline bool CanDamageSource (void) const { return (m_fCanDamageSource ? true : false); }
 		bool CanHit (CSpaceObject *pObj) const;
 		inline bool CanHitFriends (void) const { return !m_fNoFriendlyFire; }
-		IEffectPainter *CreateEffectPainter (bool bTrackingObj = false, bool bUseObjectCenter = false);
+		IEffectPainter *CreateEffectPainter (SShotCreateCtx &CreateCtx);
 		void CreateFireEffect (CSystem *pSystem, CSpaceObject *pSource, const CVector &vPos, const CVector &vVel, int iDir);
 		void CreateHitEffect (CSystem *pSystem, SDamageCtx &DamageCtx);
 		IEffectPainter *CreateParticlePainter (void);
@@ -402,7 +444,15 @@ class CWeaponFireDesc
 		bool FindDataField (const CString &sField, CString *retsValue) const;
 		CEffectCreator *FindEffectCreator (const CString &sUNID);
 		bool FindEventHandler (const CString &sEvent, SEventHandlerDesc *retEvent = NULL) const;
-		inline bool FindEventHandler (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandler (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const 
+			{
+			if (!m_CachedEvents[iEvent].pCode)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
+
 		ICCItem *FindProperty (const CString &sProperty) const;
 		CWeaponFireDesc *FindWeaponFireDesc (const CString &sUNID, char **retpPos = NULL);
 		static CWeaponFireDesc *FindWeaponFireDescFromFullUNID (const CString &sUNID);
@@ -426,13 +476,15 @@ class CWeaponFireDesc
 		Metric GetAveParticleCount (void) const;
         Metric GetAveSpeed (void) const { return 0.5 * (GetRatedSpeed() + m_rMaxMissileSpeed); }
         inline int GetContinuous (void) const { return m_iContinuous; }
-        const DamageDesc &GetDamage (void) const { return m_Damage; }
+		inline int GetContinuousFireDelay (void) const { return m_iContinuousFireDelay; }
+		const DamageDesc &GetDamage (void) const { return m_Damage; }
 		DamageTypes GetDamageType (void) const;
 		inline CEffectCreator *GetEffect (void) const { return m_pEffect; }
         inline Metric GetEffectiveRange (void) const { return m_rMaxEffectiveRange; }
 		inline ICCItem *GetEventHandler (const CString &sEvent) const { SEventHandlerDesc Event; if (!FindEventHandler(sEvent, &Event)) return NULL; return Event.pCode; }
         inline const SExhaustDesc &GetExhaust (void) const { return GetOldEffects().Exhaust; }
 		inline Metric GetExpansionSpeed (void) const { return (m_ExpansionSpeed.Roll() * LIGHT_SPEED / 100.0); }
+		inline CWeaponFireDesc *GetExplosionType (void) const { return m_pExplosionType; }
 		inline CExtension *GetExtension (void) const { return m_pExtension; }
 		inline int GetFireDelay (void) const { return m_iFireRate; }
 		inline FireTypes GetFireType (void) const { return m_iFireType; }
@@ -520,6 +572,7 @@ class CWeaponFireDesc
 		FireTypes m_iFireType;				//	beam or missile
 		DamageDesc m_Damage;				//	Damage per shot
 		int m_iContinuous;					//	repeat for this number of frames
+		int m_iContinuousFireDelay;			//	Ticks between continuous fire shots
 		int m_iFireRate;					//	Ticks between shots (-1 = default to weapon fire rate)
 
 		Metric m_rMissileSpeed;				//	Speed of missile
@@ -538,6 +591,7 @@ class CWeaponFireDesc
 		CEffectCreatorRef m_pFireEffect;	//	Effect when we fire (muzzle flash)
 		CSoundRef m_FireSound;				//	Sound when weapon is fired
         SOldEffects *m_pOldEffects;         //  Non-painter effects.
+		CWeaponFireDescRef m_pExplosionType;	//	Explosion to create when ship is destroyed
 
 		//	Missile stuff (m_iFireType == ftMissile)
 		int m_iAccelerationFactor;			//	% increase in speed per 10 ticks

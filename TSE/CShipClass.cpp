@@ -56,14 +56,12 @@
 #define DRIVE_POWER_USE_ATTRIB					CONSTLIT("drivePowerUse")
 #define EQUIPMENT_ATTRIB						CONSTLIT("equipment")
 #define EVENT_HANDLER_ATTRIB					CONSTLIT("eventHandler")
-#define EXPLOSION_TYPE_ATTRIB					CONSTLIT("explosionType")
 #define MAX_REACTOR_FUEL_ATTRIB					CONSTLIT("fuelCapacity")
 #define HEIGHT_ATTRIB							CONSTLIT("height")
 #define HP_X_ATTRIB								CONSTLIT("hpX")
 #define HP_Y_ATTRIB								CONSTLIT("hpY")
 #define HULL_VALUE_ATTRIB						CONSTLIT("hullValue")
 #define INERTIALESS_DRIVE_ATTRIB				CONSTLIT("inertialessDrive")
-#define LEAVES_WRECK_ATTRIB						CONSTLIT("leavesWreck")
 #define LEVEL_ATTRIB							CONSTLIT("level")
 #define MAX_ARMOR_ATTRIB						CONSTLIT("maxArmor")
 #define MAX_ARMOR_SPEED_ATTRIB					CONSTLIT("maxArmorSpeed")
@@ -72,7 +70,6 @@
 #define MAX_NON_WEAPONS_ATTRIB					CONSTLIT("maxNonWeapons")
 #define MAX_REACTOR_POWER_ATTRIB				CONSTLIT("maxReactorPower")
 #define MAX_SPEED_ATTRIB						CONSTLIT("maxSpeed")
-#define MAX_STRUCTURAL_HIT_POINTS_ATTRIB		CONSTLIT("maxStructuralHitPoints")
 #define MAX_WEAPONS_ATTRIB						CONSTLIT("maxWeapons")
 #define MIN_ARMOR_SPEED_ATTRIB					CONSTLIT("minArmorSpeed")
 #define NAME_ATTRIB								CONSTLIT("name")
@@ -82,7 +79,6 @@
 #define NAME_Y_ATTRIB							CONSTLIT("nameY")
 #define PERCEPTION_ATTRIB						CONSTLIT("perception")
 #define PLAYER_SHIP_ATTRIB						CONSTLIT("playerShip")
-#define RADIOACTIVE_WRECK_ATTRIB				CONSTLIT("radioactiveWreck")
 #define REACTOR_POWER_ATTRIB					CONSTLIT("reactorPower")
 #define REVERSE_ARTICLE_ATTRIB					CONSTLIT("reverseArticle")
 #define ROTATION_COUNT_ATTRIB					CONSTLIT("rotationCount")
@@ -95,14 +91,12 @@
 #define STARTING_POS_ATTRIB						CONSTLIT("startingPos")
 #define STARTING_SYSTEM_ATTRIB					CONSTLIT("startingSystem")
 #define STD_ARMOR_ATTRIB						CONSTLIT("stdArmor")
-#define STRUCTURAL_HIT_POINTS_ATTRIB			CONSTLIT("structuralHitPoints")
 #define THRUST_ATTRIB							CONSTLIT("thrust")
 #define THRUST_RATIO_ATTRIB						CONSTLIT("thrustRatio")
 #define TIME_STOP_IMMUNE_ATTRIB					CONSTLIT("timeStopImmune")
 #define UNID_ATTRIB								CONSTLIT("UNID")
 #define VIRTUAL_ATTRIB							CONSTLIT("virtual")
 #define WIDTH_ATTRIB							CONSTLIT("width")
-#define WRECK_TYPE_ATTRIB						CONSTLIT("wreckType")
 #define X_ATTRIB								CONSTLIT("x")
 #define Y_ATTRIB								CONSTLIT("y")
 
@@ -199,14 +193,10 @@
 #define PROPERTY_WRECK_STRUCTURAL_HP			CONSTLIT("wreckStructuralHP")
 
 #define SPECIAL_IS_PLAYER_CLASS					CONSTLIT("isPlayerClass:")
+#define SPECIAL_ITEM_ATTRIBUTE					CONSTLIT("itemAttribute:")
 #define SPECIAL_MANUFACTURER					CONSTLIT("manufacturer:")
 
 #define SPECIAL_VALUE_TRUE						CONSTLIT("true")
-
-#define WRECK_IMAGE_VARIANTS					3
-#define DAMAGE_IMAGE_COUNT						10
-#define DAMAGE_IMAGE_WIDTH						24
-#define DAMAGE_IMAGE_HEIGHT						24
 
 #define DEFAULT_POWER_USE						20
 
@@ -215,9 +205,6 @@ static char g_AISettingsTag[] = "AISettings";
 static char g_ManufacturerAttrib[] = "manufacturer";
 static char g_ClassAttrib[] = "class";
 static char g_TypeAttrib[] = "type";
-
-static CG32bitImage *g_pDamageBitmap = NULL;
-static CStationType *g_pWreckDesc = NULL;
 
 const int DOCK_OFFSET_STD_SIZE =				64;
 
@@ -233,6 +220,7 @@ struct ScoreDesc
 	int iExceptionalXP;
 	int iDrawbackXP;
 	int iScoreLevel;
+	int iMinCapitalShipMass;
 	};
 
 static ScoreDesc g_XP[] =
@@ -242,32 +230,38 @@ static ScoreDesc g_XP[] =
 		//					Exceptional Ability
 		//							Drawback
 		//									Level Score
+		//												Min Capital
+		//												Ship Mass
 
-		{	30,		3,		20,		-2,		50		},		//	I
-		{	55,		5,		40,		-3,		100		},		//	II
-		{	110,	10,		75,		-6,		200		},		//	III
-		{	200,	20,		130,	-10,	350		},		//	IV
-		{	340,	30,		230,	-20,	600		},		//	V
-		{	510,	45,		340,	-25,	900		},		//	VI
-		{	800,	70,		530,	-40,	1400	},		//	VII
-		{	1100,	95,		720,	-55,	1900	},		//	VIII
-		{	1500,	130,	990,	-80,	2600	},		//	IX
-		{	1850,	160,	1250,	-100,	3250	},		//	X
-		{	2400,	210,	1600,	-130,	4200	},		//	XI
-		{	3150,	280,	2100,	-170,	5500	},		//	XII
-		{	3850,	340,	2550,	-200,	6750	},		//	XIII
-		{	4700,	410,	3150,	-250,	8250	},		//	XIV
-		{	5700,	500,	3800,	-300,	10000	},		//	XV
-		{	6550,	580,	4350,	-350,	11500	},		//	XVI
-		{	7550,	660,	5050,	-400,	13250	},		//	XVII
-		{	8550,	750,	5700,	-450,	15000	},		//	XVIII
-		{	9550,	840,	6350,	-500,	16750	},		//	XIX
-		{	10500,	930,	7050,	-560,	18500	},		//	XX
-		{	11500,	1050,	7800,	-620,	20500	},		//	XXI
-		{	13000,	1150,	8550,	-680,	22500	},		//	XXII
-		{	14500,	1250,	9500,	-750,	25000	},		//	XXIII
-		{	15000,	1350,	10000,	-800,	26500	},		//	XXIV
-		{	17000,	1500,	11500,	-900,	30000	},		//	XXV
+		{	30,		3,		20,		-2,		50,			5000		},		//	1
+		{	55,		5,		40,		-3,		100,		5000		},		//	2
+		{	110,	10,		75,		-6,		200,		5000		},		//	3
+		{	200,	20,		130,	-10,	350,		7000		},		//	4
+		{	340,	30,		230,	-20,	600,		7000		},		//	5
+
+		{	510,	45,		340,	-25,	900,		7000		},		//	6
+		{	800,	70,		530,	-40,	1400,		10000	},		//	7
+		{	1100,	95,		720,	-55,	1900,		10000	},		//	8
+		{	1500,	130,	990,	-80,	2600,		10000	},		//	9
+		{	1850,	160,	1250,	-100,	3250,		10000	},		//	10
+
+		{	2400,	210,	1600,	-130,	4200,		18000	},		//	11
+		{	3150,	280,	2100,	-170,	5500,		20000	},		//	12
+		{	3850,	340,	2550,	-200,	6750,		25000	},		//	13
+		{	4700,	410,	3150,	-250,	8250,		36000	},		//	14
+		{	5700,	500,	3800,	-300,	10000,		54000	},		//	15
+
+		{	6550,	580,	4350,	-350,	11500,		90000	},		//	16
+		{	7550,	660,	5050,	-400,	13250,		117000	},		//	17
+		{	8550,	750,	5700,	-450,	15000,		144000	},		//	18
+		{	9550,	840,	6350,	-500,	16750,		162000	},		//	19
+		{	10500,	930,	7050,	-560,	18500,		180000	},		//	20
+
+		{	11500,	1050,	7800,	-620,	20500,		200000	},		//	21
+		{	13000,	1150,	8550,	-680,	22500,		200000	},		//	22
+		{	14500,	1250,	9500,	-750,	25000,		200000	},		//	23
+		{	15000,	1350,	10000,	-800,	26500,		200000	},		//	24
+		{	17000,	1500,	11500,	-900,	30000,		200000	},		//	25
 	};
 
 #define SCORE_DESC_COUNT							(sizeof(g_XP) / sizeof(g_XP[0]))
@@ -1017,7 +1011,7 @@ Metric CShipClass::CalcManeuverValue (bool bDodge) const
 	//	Generate an adjustment based on ship size:
 	//	1 = normal dodge rate; 10 = very low dodge rate
 
-	int cxWidth = RectWidth(GetImage().GetImageRect());
+	int cxWidth = RectWidth(m_Image.GetSimpleImage().GetImageRect());
 	int iSizeAdj = (bDodge ? Max(1, cxWidth / SIZE_FACTOR) : 1);
 
 	//	Adjust dodge rate
@@ -1494,144 +1488,7 @@ bool CShipClass::CreateEmptyWreck (CSystem *pSystem,
 //	Create an empty wreck of the given ship class
 
 	{
-	DEBUG_TRY
-
-	SSystemCreateCtx Ctx(pSystem);
-
-	SObjCreateCtx CreateCtx(Ctx);
-	CreateCtx.vPos = vPos;
-	CreateCtx.vVel = vVel;
-
-	//	Create the wreck
-
-	CStation *pWreck;
-	if (CStation::CreateFromType(pSystem,
-			GetWreckDesc(),
-			CreateCtx,
-			&pWreck) != NOERROR)
-		return false;
-
-	//	Set properties of the wreck
-
-	pWreck->SetSovereign(pSovereign);
-	pWreck->SetWreckImage(this);
-	pWreck->SetWreckParams(this, pShip);
-
-	//	Done
-
-	if (retpWreck)
-		*retpWreck = pWreck;
-
-	return true;
-
-	DEBUG_CATCH
-	}
-
-void CShipClass::CreateExplosion (CShip *pShip, CSpaceObject *pWreck)
-
-//	CreateExplosion
-//
-//	Creates an explosion for the given ship
-
-	{
-	DEBUG_TRY
-
-	//	Explosion effect and damage
-
-	SExplosionType Explosion;
-	pShip->FireGetExplosionType(&Explosion);
-	if (Explosion.pDesc == NULL)
-		Explosion.pDesc = GetExplosionType(pShip);
-
-	//	Explosion
-
-	if (Explosion.pDesc)
-		{
-		SShotCreateCtx Ctx;
-
-		Ctx.pDesc = Explosion.pDesc;
-		if (Explosion.iBonus != 0)
-			{
-			Ctx.pEnhancements.TakeHandoff(new CItemEnhancementStack);
-			Ctx.pEnhancements->InsertHPBonus(Explosion.iBonus);
-			}
-
-		Ctx.Source = CDamageSource(pShip, Explosion.iCause, pWreck);
-		Ctx.vPos = pShip->GetPos();
-		Ctx.vVel = pShip->GetVel();
-		Ctx.iDirection = pShip->GetRotation();
-		Ctx.dwFlags = SShotCreateCtx::CWF_EXPLOSION;
-
-		pShip->GetSystem()->CreateWeaponFire(Ctx);
-		}
-
-	//	Otherwise, if no defined explosion, we create a default one
-
-	else
-		{
-		DWORD dwEffectID;
-
-		//	If this is a large ship, use a large explosion
-
-		if (RectWidth(GetImage().GetImageRect()) > 64)
-			dwEffectID = g_LargeExplosionUNID;
-		else
-			dwEffectID = g_ExplosionUNID;
-
-		CEffectCreator *pEffect = g_pUniverse->FindEffectType(dwEffectID);
-		if (pEffect)
-			pEffect->CreateEffect(pShip->GetSystem(),
-					pWreck,
-					pShip->GetPos(),
-					pShip->GetVel(),
-					0);
-
-		//	Particles
-
-		CObjectImageArray Image;
-		RECT rcRect;
-		rcRect.left = 0;
-		rcRect.top = 0;
-		rcRect.right = 4;
-		rcRect.bottom = 4;
-		Image.Init(g_ShipExplosionParticlesUNID,
-				rcRect,
-				8,
-				3);
-
-		CParticleEffect::CreateExplosion(pShip->GetSystem(),
-				//pWreck,
-				NULL,
-				pShip->GetPos(),
-				pShip->GetVel(),
-				mathRandom(1, 50),
-				LIGHT_SPEED * 0.25,
-				0,
-				300,
-				Image,
-				NULL);
-
-		//	HACK: No image means paint smoke particles
-
-		CObjectImageArray Dummy;
-		CParticleEffect::CreateExplosion(pShip->GetSystem(),
-				//pWreck,
-				NULL,
-				pShip->GetPos(),
-				pShip->GetVel(),
-				mathRandom(25, 150),
-				LIGHT_SPEED * 0.1,
-				20 + mathRandom(10, 30),
-				45,
-				Dummy,
-				NULL);
-		}
-
-	//	Always play default sound
-
-	g_pUniverse->PlaySound(pShip, g_pUniverse->FindSound(g_ShipExplosionSoundUNID));
-
-	DEBUG_CATCH
+	return m_WreckDesc.CreateEmptyWreck(pSystem, this, pShip, vPos, vVel, pSovereign, retpWreck);
 	}
 
 void CShipClass::CreateImage (CG32bitImage &Dest, int iTick, int iRotation, Metric rScale)
@@ -1643,7 +1500,7 @@ void CShipClass::CreateImage (CG32bitImage &Dest, int iTick, int iRotation, Metr
 	{
 	int i;
 
-	if (!GetImage().IsLoaded())
+	if (!m_Image.GetSimpleImage().IsLoaded())
 		return;
 
 	//	Start by computing the total size of a normal image (and its origin).
@@ -1673,7 +1530,7 @@ void CShipClass::CreateImage (CG32bitImage &Dest, int iTick, int iRotation, Metr
 	//	Get the positions of all attached components
 
 	TArray<CVector> Pos;
-	m_Interior.CalcCompartmentPositions(GetImage().GetImageViewportSize(), Pos);
+	m_Interior.CalcCompartmentPositions(GetImageViewportSize(), Pos);
 
 	//	Scale and rotate accordingly
 
@@ -1696,17 +1553,17 @@ void CShipClass::CreateImage (CG32bitImage &Dest, int iTick, int iRotation, Metr
 		int xPos = xCenter + (int)mathRound(vPos.GetX());
 		int yPos = yCenter -(int)mathRound(vPos.GetY());
 
-		int cxScaledSize = (int)mathRound(rScale * pClass->GetImage().GetImageWidth());
+		int cxScaledSize = (int)mathRound(rScale * pClass->m_Image.GetSimpleImage().GetImageWidth());
 		int iDirection = pClass->GetRotationDesc().GetFrameIndex(iRotation);
 
-		pClass->GetImage().PaintScaledImage(Dest, xPos, yPos, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
+		m_Image.GetSimpleImage().PaintScaledImage(Dest, xPos, yPos, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
 		}
 
 	//	Blt the main image on top
 
-	int cxScaledSize = (int)mathRound(rScale * GetImage().GetImageWidth());
+	int cxScaledSize = (int)mathRound(rScale * m_Image.GetSimpleImage().GetImageWidth());
 	int iDirection = GetRotationDesc().GetFrameIndex(iRotation);
-	GetImage().PaintScaledImage(Dest, xOrigin, yOrigin, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
+	m_Image.GetSimpleImage().PaintScaledImage(Dest, xOrigin, yOrigin, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
 	}
 
 void CShipClass::CreateScaledImage (CG32bitImage &Dest, int iTick, int iRotation, int cxWidth, int cyHeight)
@@ -1718,7 +1575,7 @@ void CShipClass::CreateScaledImage (CG32bitImage &Dest, int iTick, int iRotation
 	{
 	int i;
 
-	if (!GetImage().IsLoaded())
+	if (!m_Image.GetSimpleImage().IsLoaded())
 		return;
 
 	//	Create the destination
@@ -1747,7 +1604,7 @@ void CShipClass::CreateScaledImage (CG32bitImage &Dest, int iTick, int iRotation
 	//	Get the positions of all attached components
 
 	TArray<CVector> Pos;
-	m_Interior.CalcCompartmentPositions(GetImage().GetImageViewportSize(), Pos);
+	m_Interior.CalcCompartmentPositions(GetImageViewportSize(), Pos);
 
 	//	Scale and rotate accordingly
 
@@ -1770,17 +1627,17 @@ void CShipClass::CreateScaledImage (CG32bitImage &Dest, int iTick, int iRotation
 		int xPos = xCenter + (int)mathRound(vPos.GetX());
 		int yPos = yCenter -(int)mathRound(vPos.GetY());
 
-		int cxScaledSize = (int)mathRound(rScale * pClass->GetImage().GetImageWidth());
+		int cxScaledSize = (int)mathRound(rScale * pClass->m_Image.GetSimpleImage().GetImageWidth());
 		int iDirection = pClass->GetRotationDesc().GetFrameIndex(iRotation);
 
-		pClass->GetImage().PaintScaledImage(Dest, xPos, yPos, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
+		pClass->m_Image.GetSimpleImage().PaintScaledImage(Dest, xPos, yPos, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
 		}
 
 	//	Blt the main image on top
 
-	int cxScaledSize = (int)mathRound(rScale * GetImage().GetImageWidth());
+	int cxScaledSize = (int)mathRound(rScale * m_Image.GetSimpleImage().GetImageWidth());
 	int iDirection = GetRotationDesc().GetFrameIndex(iRotation);
-	GetImage().PaintScaledImage(Dest, xOrigin, yOrigin, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
+	m_Image.GetSimpleImage().PaintScaledImage(Dest, xOrigin, yOrigin, iTick, iDirection, cxScaledSize, cxScaledSize, CObjectImageArray::FLAG_CACHED);
 	}
 
 bool CShipClass::CreateWreck (CShip *pShip, CSpaceObject **retpWreck)
@@ -1790,207 +1647,7 @@ bool CShipClass::CreateWreck (CShip *pShip, CSpaceObject **retpWreck)
 //	Creates a wreck for the given ship
 
 	{
-	DEBUG_TRY
-
-	//	Create the wreck
-
-	CStation *pWreck;
-	if (!CreateEmptyWreck(pShip->GetSystem(),
-			pShip,
-			pShip->GetPos(),
-			pShip->GetVel(),
-			pShip->GetSovereign(),
-			&pWreck))
-		return false;
-
-	//	The chance that an installed item survives is related to
-	//	the wreck chance.
-
-	int iDestroyArmorChance = 100 - (GetWreckChance() / 2);
-	int iDestroyDeviceChance = 100 - Min(GetWreckChance(), 50);
-
-	//	Decrease the chance of armor surviving if this ship class
-	//	has lots of armor segments
-
-	iDestroyArmorChance = Min(Max(iDestroyArmorChance, 100 - (100 / (1 + GetHullSectionCount()))), 95);
-
-	//	Add items to the wreck
-
-	CItemListManipulator Source(pShip->GetItemList());
-	CItemListManipulator Dest(pWreck->GetItemList());
-
-	while (Source.MoveCursorForward())
-		{
-		CItem WreckItem = Source.GetItemAtCursor();
-
-		//	Installed items may or may not be damaged.
-
-		if (WreckItem.IsInstalled())
-			{
-			//	Make sure that the armor item reflects the current
-			//	state of the ship's armor.
-
-			if (WreckItem.IsArmor())
-				{
-				//	Most armor is destroyed
-
-				if (mathRandom(1, 100) <= iDestroyArmorChance)
-					continue;
-
-				//	Compute the % damage of the armor.
-
-				CInstalledArmor *pArmor = pShip->GetArmorSection(WreckItem.GetInstalled());
-				int iArmorHP = pArmor->GetHitPoints();
-				int iArmorMaxHP = pArmor->GetMaxHP(pShip);
-				int iArmorIntegrity = (iArmorMaxHP > 0 ? 100 * iArmorHP / iArmorMaxHP : 0);
-
-				//	Add this item to the wreck
-
-				Dest.AddDamagedComponents(WreckItem, 100 - iArmorIntegrity);
-				}
-
-			//	Other installed devices have a chance of being
-			//	damaged or destroyed.
-
-			else
-				{
-				//	Sometimes the device is destroyed
-
-				if (mathRandom(1, 100) <= iDestroyDeviceChance)
-					continue;
-
-				//	The rest of the time, we drop the device with an 80% chance
-				//	of being damaged.
-
-				Dest.AddDamagedComponents(WreckItem, 80);
-				}
-			}
-
-		//	Non-installed virtual items are always lost
-
-		else if (WreckItem.IsVirtual())
-			continue;
-
-		//	Otherwise, if this is just cargo, add to wreck
-
-		else
-			Dest.AddItem(WreckItem);
-		}
-
-	//	The wreck is radioactive if the ship is radioactive (or if this
-	//	ship class always has radioactive wrecks)
-
-	if (pShip->IsRadioactive() || m_fRadioactiveWreck)
-		pWreck->MakeRadioactive();
-
-	//	Done
-
-	if (retpWreck)
-		*retpWreck = pWreck;
-
-	return true;
-
-	DEBUG_CATCH
-	}
-
-void CShipClass::CreateWreckImage (void)
-
-//	CreateWreckImage
-//
-//	Creates a wreck image randomly
-
-	{
-	DEBUG_TRY
-
-	int i;
-
-	if (!GetImage().IsLoaded())
-		return;
-
-	int cxWidth = RectWidth(GetImage().GetImageRect());
-	int cyHeight = RectHeight(GetImage().GetImageRect());
-
-	//	Get the image for damage
-
-	if (g_pDamageBitmap == NULL)
-		{
-		CObjectImage *pDamageImage = g_pUniverse->FindLibraryImage(g_DamageImageUNID);
-		if (pDamageImage == NULL)
-			return;
-
-		//	Lock the image because we keep it around in a global
-
-		SDesignLoadCtx Ctx;
-		if (pDamageImage->Lock(Ctx) != NOERROR)
-			return;
-
-		//	Get the image
-
-		g_pDamageBitmap = pDamageImage->GetRawImage(strFromInt(GetUNID()));
-		if (g_pDamageBitmap == NULL)
-			return;
-		}
-
-	//	Create the bitmap
-
-	CG32bitImage &SourceImage = GetImage().GetImage(NULL_STR);
-	m_WreckBitmap.Create(cxWidth, cyHeight * WRECK_IMAGE_VARIANTS, SourceImage.GetAlphaType());
-
-	//	Blt the images
-
-	TArray<int> Rotations;
-	Rotations.InsertEmpty(WRECK_IMAGE_VARIANTS);
-
-	for (i = 0; i < WRECK_IMAGE_VARIANTS; i++)
-		{
-		//	Pick a random rotation
-
-		Rotations[i] = mathRandom(0, GetRotationDesc().GetFrameCount() - 1);
-
-		//	Copy the frame
-
-		GetImage().CopyImage(m_WreckBitmap,
-				0,
-				i * cyHeight,
-				0,
-				Rotations[i]);
-
-		//	Add some destruction
-
-		int iCount = cxWidth * 2;
-		for (int j = 0; j < iCount; j++)
-			{
-			m_WreckBitmap.Blt(DAMAGE_IMAGE_WIDTH * mathRandom(0, DAMAGE_IMAGE_COUNT-1),
-					0,
-					DAMAGE_IMAGE_WIDTH,
-					DAMAGE_IMAGE_COUNT,
-					255,
-					*g_pDamageBitmap,
-					mathRandom(0, cxWidth-1) - (DAMAGE_IMAGE_WIDTH / 2),
-					(i * cyHeight) + mathRandom(0, cyHeight-1) - (DAMAGE_IMAGE_HEIGHT / 2));
-			}
-
-		}
-
-	//	Copy the mask back to the image because we blew it away painting
-	//	the damage.
-
-	for (i = 0; i < WRECK_IMAGE_VARIANTS; i++)
-		{
-		RECT rcSrc = GetImage().GetImageRect(0, Rotations[i]);
-		m_WreckBitmap.CopyChannel(channelAlpha, rcSrc.left, rcSrc.top, cxWidth, cyHeight, SourceImage, 0, i * cyHeight);
-		}
-
-	//	Initialize an image
-
-	RECT rcRect;
-	rcRect.left = 0;
-	rcRect.top = 0;
-	rcRect.right = cxWidth;
-	rcRect.bottom = cyHeight;
-	m_WreckImage.Init(&m_WreckBitmap, rcRect, 0, 0, false);
-
-	DEBUG_CATCH
+	return m_WreckDesc.CreateWreck(pShip, retpWreck);
 	}
 
 void CShipClass::FindBestMissile (CDeviceClass *pLauncher, IItemGenerator *pItems, CItemType **retpBestMissile) const
@@ -2245,7 +1902,7 @@ bool CShipClass::FindDataField (const CString &sField, CString *retsValue) const
 		*retsValue = strFromInt(m_pItems ? (int)m_pItems->GetAverageValue(GetLevel()) : 0);
 
 	else if (strEquals(sField, FIELD_WRECK_CHANCE))
-		*retsValue = strFromInt(m_iLeavesWreck);
+		*retsValue = strFromInt(m_WreckDesc.GetWreckChance());
 
 	else if (strEquals(sField, FIELD_PRIMARY_WEAPON_RANGE))
 		{
@@ -2491,6 +2148,26 @@ const CCargoDesc &CShipClass::GetCargoDesc (const CItem **retpCargoItem) const
     return m_Perf.GetCargoDesc();
     }
 
+DWORD CShipClass::GetCategoryFlags (void) const
+
+//	GetCategoryFlags
+//
+//	Returns flags describing various ship categories.
+
+	{
+	DWORD dwFlags = 0;
+
+	//	Are we a capital ship?
+
+	ScoreDesc *pBase = &g_XP[GetLevel() - 1];
+	if (m_Hull.GetMass() >= pBase->iMinCapitalShipMass)
+		dwFlags |= catCapitalShip;
+
+	//	Done
+
+	return dwFlags;
+	}
+
 CCommunicationsHandler *CShipClass::GetCommsHandler (void)
 
 //	GetCommsHandler
@@ -2530,7 +2207,7 @@ CVector CShipClass::GetDockingPortOffset (int iRotation)
 	{
 	//	For small ships we just go with the ship center.
 
-    int iImageSize = RectWidth(GetImage().GetImageRect());
+    int iImageSize = RectWidth(m_Image.GetSimpleImage().GetImageRect());
 	if (iImageSize <= DOCK_OFFSET_STD_SIZE)
 		return NullVector;
 
@@ -2587,8 +2264,8 @@ CWeaponFireDesc *CShipClass::GetExplosionType (CShip *pShip) const
 	{
 	//	If we've got a defined explosion, then return that
 
-	if (m_pExplosionType)
-		return m_pExplosionType;
+	if (m_WreckDesc.GetExplosionType())
+		return m_WreckDesc.GetExplosionType();
 
 	//	If no defined explosion, come up with an appropriate one.
 	//
@@ -2852,6 +2529,7 @@ CCurrencyAndValue CShipClass::GetHullValue (CShip *pShip) const
 
 	//	Otherwise, if we run the event to get the value
 
+	Ctx.DefineContainingType(pShip);
 	Ctx.SaveAndDefineSourceVar(pShip);
 	Ctx.SetEvent(eventGetHullPrice);
 	Ctx.DefineString(CONSTLIT("aCurrency"), HullValue.GetSID());
@@ -2875,6 +2553,23 @@ CCurrencyAndValue CShipClass::GetHullValue (CShip *pShip) const
 	return HullValue;
 	}
 
+const CObjectImageArray &CShipClass::GetImage (const CImageFilterStack *pFilters) const
+
+//	GetImage
+//
+//	Returns the image for the class.
+
+	{
+	if (pFilters == NULL)
+		return m_Image.GetSimpleImage();
+	
+	CCompositeImageModifiers Modifiers;
+	Modifiers.SetFullImage();
+	Modifiers.SetFilters(pFilters);
+
+	return m_Image.GetImage(CCompositeImageSelector::Null(), Modifiers);
+	}
+
 int CShipClass::GetMaxStructuralHitPoints (void) const
 
 //	GetMaxStructuralHitPoints
@@ -2884,8 +2579,8 @@ int CShipClass::GetMaxStructuralHitPoints (void) const
 	{
 	//	If it is set, return that
 	
-	if (m_iStructuralHP)
-		return m_iStructuralHP;
+	if (m_WreckDesc.GetStructuralHP())
+		return m_WreckDesc.GetStructuralHP();
 
 	//	Otherwise we have to compute it based on level and mass
 
@@ -3026,7 +2721,7 @@ CVector CShipClass::GetPosOffset (int iAngle, int iRadius, int iPosZ, bool b3DPo
 	{
 	if (b3DPos)
 		{
-		int iScale = GetImage().GetImageViewportSize();
+		int iScale = GetImageViewportSize();
 
 		CVector vOffset;
 		C3DConversion::CalcCoord(iScale, 90 + iAngle, iRadius, iPosZ, &vOffset);
@@ -3102,44 +2797,6 @@ CCurrencyAndValue CShipClass::GetTradePrice (CSpaceObject *pObj, bool bActual) c
 	//	Done
 
 	return Value;
-	}
-
-CStationType *CShipClass::GetWreckDesc (void)
-	{
-	if (m_pWreckType)
-		return m_pWreckType;
-	else
-		{
-		if (g_pWreckDesc == NULL)
-			g_pWreckDesc = g_pUniverse->FindStationType(g_ShipWreckUNID);
-
-		return g_pWreckDesc;
-		}
-	}
-
-void CShipClass::GetWreckImage (CObjectImageArray *retWreckImage)
-
-//	GetWreckImage
-//
-//	Returns wreck image
-
-	{
-	RECT rcRect;
-	rcRect.left = 0;
-	rcRect.top = 0;
-	rcRect.right = RectWidth(GetImage().GetImageRect());
-	rcRect.bottom = RectHeight(GetImage().GetImageRect());
-	retWreckImage->Init(&m_WreckBitmap, rcRect, 0, 0, false);
-	}
-
-int CShipClass::GetWreckImageVariants (void)
-
-//	GetWreckImageVariants
-//
-//	Returns the number of wreck images
-
-	{
-	return WRECK_IMAGE_VARIANTS;
 	}
 
 void CShipClass::InitEffects (CShip *pShip, CObjectEffectList *retEffects)
@@ -3320,8 +2977,7 @@ void CShipClass::UnbindGlobal (void)
 //	We're unbinding, which means we have to release any resources.
 
 	{
-	g_pDamageBitmap = NULL;
-	g_pWreckDesc = NULL;
+	CShipwreckDesc::UnbindGlobal();
 	m_bDefaultPlayerSettingsBound = false;
 	}
 
@@ -3338,9 +2994,12 @@ void CShipClass::MarkImages (bool bMarkDevices)
 
 	m_Image.MarkImage();
     m_HeroImage.MarkImage();
+	m_WreckDesc.MarkImages();
 
-	if (m_pExplosionType)
-		m_pExplosionType->MarkImages();
+	//	We make sure the wreck image is created (if it is already created, then
+	//	this call just marks it.
+
+	m_WreckDesc.CreateWreckImage(GetUNID(), m_Image.GetSimpleImage());
 
 	//	If necessary mark images for all our installed devices
 
@@ -3352,12 +3011,6 @@ void CShipClass::MarkImages (bool bMarkDevices)
 			pDevice->MarkImages();
 			}
 		}
-
-	//	Wreck images
-
-	if (!m_WreckImage.IsLoaded())
-		CreateWreckImage();
-    m_WreckImage.MarkImage();
 
 	//	Effects
 
@@ -3394,9 +3047,10 @@ void CShipClass::OnAddTypesUsed (TSortMap<DWORD, bool> *retTypesUsed)
 
 	{
 	retTypesUsed->SetAt(m_pDefaultSovereign.GetUNID(), true);
-	retTypesUsed->SetAt(m_pWreckType.GetUNID(), true);
 
     m_Armor.AddTypesUsed(retTypesUsed);
+	m_WreckDesc.AddTypesUsed(retTypesUsed);
+	m_Image.AddTypesUsed(retTypesUsed);
 
 	if (m_pDeviceSlots)
 		m_pDeviceSlots->AddTypesUsed(retTypesUsed);
@@ -3416,10 +3070,7 @@ void CShipClass::OnAddTypesUsed (TSortMap<DWORD, bool> *retTypesUsed)
 
 	retTypesUsed->SetAt(strToInt(m_pDefaultScreen.GetUNID(), 0), true);
 	retTypesUsed->SetAt(m_dwDefaultBkgnd, true);
-	retTypesUsed->SetAt(GetImage().GetBitmapUNID(), true);
 	retTypesUsed->SetAt(m_HeroImage.GetBitmapUNID(), true);
-	retTypesUsed->SetAt(m_WreckImage.GetBitmapUNID(), true);
-	retTypesUsed->SetAt(m_pExplosionType.GetUNID(), true);
 	retTypesUsed->SetAt(m_ExhaustImage.GetBitmapUNID(), true);
 	retTypesUsed->SetAt(m_Hull.GetValue().GetCurrencyType()->GetUNID(), true);
 	}
@@ -3471,7 +3122,7 @@ ALERROR CShipClass::OnBindDesign (SDesignLoadCtx &Ctx)
 
 	//	Thruster effects
 
-	if (error = m_Effects.Bind(Ctx, GetImage()))
+	if (error = m_Effects.Bind(Ctx, m_Image.GetSimpleImage()))
 		goto Fail;
 
 	//	Drive images
@@ -3479,7 +3130,7 @@ ALERROR CShipClass::OnBindDesign (SDesignLoadCtx &Ctx)
 	if (m_Exhaust.GetCount() > 0)
 		{
 		int iRotationCount = m_RotationDesc.GetFrameCount();
-		int iScale = GetImage().GetImageViewportSize();
+		int iScale = GetImageViewportSize();
 
 		m_ExhaustImage.SetRotationCount(iRotationCount);
 		if (error = m_ExhaustImage.OnDesignLoadComplete(Ctx))
@@ -3497,7 +3148,7 @@ ALERROR CShipClass::OnBindDesign (SDesignLoadCtx &Ctx)
     if (error = m_Armor.Bind(Ctx))
         goto Fail;
 
-	if (error = m_pExplosionType.Bind(Ctx))
+	if (error = m_WreckDesc.Bind(Ctx))
 		goto Fail;
 
 	//	More
@@ -3536,8 +3187,8 @@ ALERROR CShipClass::OnBindDesign (SDesignLoadCtx &Ctx)
 
 	if (m_AISettings.GetMinCombatSeparation() < 0.0)
 		{
-		if (GetImage().IsLoaded())
-			m_AISettings.SetMinCombatSeparation(RectWidth(GetImage().GetImageRect()) * g_KlicksPerPixel);
+		if (m_Image.GetSimpleImage().IsLoaded())
+			m_AISettings.SetMinCombatSeparation(RectWidth(m_Image.GetSimpleImage().GetImageRect()) * g_KlicksPerPixel);
 		else
 			m_AISettings.SetMinCombatSeparation(60.0 * g_KlicksPerPixel);
 		}
@@ -3561,11 +3212,6 @@ ALERROR CShipClass::OnBindDesign (SDesignLoadCtx &Ctx)
 	if (m_pEscorts)
 		if (error = m_pEscorts->OnDesignLoadComplete(Ctx))
 			return error;
-
-	//	Create the random wreck images
-
-	if (error = m_pWreckType.Bind(Ctx))
-		goto Fail;
 
 	//	Generate an average set of devices.
 	//
@@ -3628,10 +3274,9 @@ ALERROR CShipClass::OnFinishBindDesign (SDesignLoadCtx &Ctx)
 	if (!m_fLevelOverride)
 		m_iLevel = CalcLevel();
 
-	if (!m_fCyberDefenseOverride)
-		m_iCyberDefenseLevel = m_iLevel;
-
 	m_iLevelType = CalcBalanceType(NULL, &m_rCombatStrength);
+
+	m_Hull.InitCyberDefenseLevel(m_iLevel);
 
 	//	Done
 
@@ -3675,12 +3320,8 @@ void CShipClass::OnInitFromClone (CDesignType *pSource)
 	m_rThrustRatio = pClass->m_rThrustRatio;
 	m_DriveDesc = pClass->m_DriveDesc;
 	m_ReactorDesc = pClass->m_ReactorDesc;
-	m_iCyberDefenseLevel = pClass->m_iCyberDefenseLevel;
-	m_fCyberDefenseOverride = pClass->m_fCyberDefenseOverride;
+	m_WreckDesc = pClass->m_WreckDesc;
 
-	m_iLeavesWreck = pClass->m_iLeavesWreck;
-	m_iStructuralHP = pClass->m_iStructuralHP;
-	m_pWreckType = pClass->m_pWreckType;
 	m_Armor = pClass->m_Armor;
 	m_Interior = pClass->m_Interior;
 
@@ -3745,12 +3386,8 @@ void CShipClass::OnInitFromClone (CDesignType *pSource)
 	//	No need to copy m_WreckImage or m_WreckBitmap because they are just
 	//	caches.
 
-	m_pExplosionType = pClass->m_pExplosionType;
 	m_ExhaustImage = pClass->m_ExhaustImage;
 	m_Exhaust = pClass->m_Exhaust;
-
-	m_fRadioactiveWreck = pClass->m_fRadioactiveWreck;
-	m_fTimeStopImmune = pClass->m_fTimeStopImmune;
 
 	//	m_fHasOn... are computed during bind
 
@@ -3829,12 +3466,17 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 	//	If 0 size, come up with a reasonable default based on image size.
 
 	if (m_Hull.GetSize() == 0 && !m_Image.IsEmpty())
-		m_Hull.SetSize(CalcDefaultSize(GetImage()));
+		m_Hull.SetSize(CalcDefaultSize(m_Image.GetSimpleImage()));
 
 	//	If we have no max armor limit, then we compute default values.
 
 	if (m_Hull.GetMaxArmorMass() == 0)
 		m_Hull.InitDefaultArmorLimits(iMaxSpeed, (m_rThrustRatio > 0.0 ? m_rThrustRatio : CDriveDesc::CalcThrustRatio(m_DriveDesc.GetThrust(), m_Hull.GetMass())));
+
+	//	Wreck descriptor
+
+	if (error = m_WreckDesc.InitFromXML(Ctx, pDesc, m_Hull.GetMass()))
+		return ComposeLoadError(Ctx, Ctx.sError);
 
 	//	Load effects
 
@@ -3851,13 +3493,6 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 
 	if (error = m_ReactorDesc.InitFromXML(Ctx, pDesc, GetUNID(), true))
 		return error;
-
-	if ((m_fCyberDefenseOverride = pDesc->FindAttributeInteger(CYBER_DEFENSE_LEVEL_ATTRIB, &m_iCyberDefenseLevel)))
-		m_iCyberDefenseLevel = Max(1, m_iCyberDefenseLevel);
-	else
-		m_iCyberDefenseLevel = 0;
-
-	m_fTimeStopImmune = pDesc->GetAttributeBool(TIME_STOP_IMMUNE_ATTRIB);
 
 	//	Load armor
 
@@ -3948,7 +3583,7 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 	CXMLElement *pDriveImages = pDesc->GetContentElementByTag(DRIVE_IMAGES_TAG);
 	if (pDriveImages)
 		{
-		int iScale = GetImage().GetImageViewportSize();
+		int iScale = GetImageViewportSize();
 
 		for (i = 0; i < pDriveImages->GetContentElementCount(); i++)
 			{
@@ -3998,7 +3633,7 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 
 	//	Initialize docking data
 
-	m_DockingPorts.InitPortsFromXML(NULL, pDesc, GetImage().GetImageViewportSize());
+	m_DockingPorts.InitPortsFromXML(NULL, pDesc, GetImageViewportSize());
 	if (m_DockingPorts.GetPortCount() > 0)
 		{
 		//	Load the default screen
@@ -4040,37 +3675,11 @@ ALERROR CShipClass::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 
 	m_fCommsHandlerInit = false;
 
-	//	Miscellaneous
-
-	if (pDesc->FindAttributeInteger(LEAVES_WRECK_ATTRIB, &m_iLeavesWreck))
-		m_iLeavesWreck = Max(0, m_iLeavesWreck);
-	else
-		{
-		//	Chance of wreck is a function of mass:
-		//
-		//	prob = 5 * MASS^0.45
-
-		m_iLeavesWreck = Max(0, Min((int)(5.0 * pow((Metric)m_Hull.GetMass(), 0.45)), 100));
-		}
-
-	if (error = m_pWreckType.LoadUNID(Ctx, pDesc->GetAttribute(WRECK_TYPE_ATTRIB)))
-		return error;
-
-	m_fRadioactiveWreck = pDesc->GetAttributeBool(RADIOACTIVE_WRECK_ATTRIB);
-	m_iStructuralHP = pDesc->GetAttributeIntegerBounded(STRUCTURAL_HIT_POINTS_ATTRIB, 0, -1, -1);
-	if (m_iStructuralHP == -1)
-		m_iStructuralHP = pDesc->GetAttributeIntegerBounded(MAX_STRUCTURAL_HIT_POINTS_ATTRIB, 0, -1, 0);
-
     //  Load initial data, if available
 
     CXMLElement *pInitData = pDesc->GetContentElementByTag(INITIAL_DATA_TAG);
     if (pInitData)
         m_InitialData.SetFromXML(pInitData);
-
-	//	Explosion
-
-	if (error = m_pExplosionType.LoadUNID(Ctx, pDesc->GetAttribute(EXPLOSION_TYPE_ATTRIB)))
-		return error;
 
 	//	Load player settings
 
@@ -4248,6 +3857,18 @@ bool CShipClass::OnHasSpecialAttribute (const CString &sAttrib) const
 
 		return (strEquals(sValue, SPECIAL_VALUE_TRUE) == bIsPlayerClass);
 		}
+	else if (strStartsWith(sAttrib, SPECIAL_ITEM_ATTRIBUTE))
+		{
+		CString sItemAttrib = strSubString(sAttrib, SPECIAL_ITEM_ATTRIBUTE.GetLength());
+
+		if (m_pDevices && m_pDevices->HasItemAttribute(sItemAttrib))
+			return true;
+
+		if (m_pItems && m_pItems->HasItemAttribute(sItemAttrib))
+			return true;
+
+		return false;
+		}
 	else if (strStartsWith(sAttrib, SPECIAL_MANUFACTURER))
 		{
 		CString sValue = strSubString(sAttrib, SPECIAL_MANUFACTURER.GetLength());
@@ -4351,7 +3972,7 @@ void CShipClass::OnReinit (void)
 	DEBUG_TRY
 
 	InitShipNamesIndices();
-	m_WreckImage.CleanUp();
+	m_WreckDesc.CleanUp();
 
     //  If we created the hero image, then free it.
 
@@ -4372,11 +3993,7 @@ void CShipClass::OnSweep (void)
 
     //  Clean up wreck image
 
-    if (!m_WreckImage.IsMarked())
-        {
-        m_WreckImage.CleanUp();
-        m_WreckImage.CleanUp();
-        }
+	m_WreckDesc.SweepImages();
 
     //  If we created the hero image, then we free it.
 
@@ -4501,7 +4118,7 @@ void CShipClass::PaintDevicePositions (CG32bitImage &Dest, int x, int y, const C
 
 	{
 	int i;
-	int iScale = GetImage().GetImageViewportSize();
+	int iScale = GetImageViewportSize();
 
 	for (i = 0; i < Devices.GetCount(); i++)
 		{
@@ -4524,7 +4141,7 @@ void CShipClass::PaintDockPortPositions (CG32bitImage &Dest, int x, int y, int i
 //	Paint docking ports
 
 	{
-	int iScale = GetImage().GetImageViewportSize();
+	int iScale = GetImageViewportSize();
 	m_DockingPorts.DebugPaint(Dest, x, y, iShipRotation, iScale);
 	}
 
@@ -4535,7 +4152,7 @@ void CShipClass::PaintInteriorCompartments (CG32bitImage &Dest, int x, int y, in
 //	Paints outline of interior compartments
 
 	{
-	int iScale = GetImage().GetImageViewportSize();
+	int iScale = GetImageViewportSize();
 	m_Interior.DebugPaint(Dest, x, y, iShipRotation, iScale);
 	}
 
@@ -4553,7 +4170,7 @@ void CShipClass::PaintMap (CMapViewportCtx &Ctx,
 //	Paints the ship class on the map
 
 	{
-	GetImage().PaintScaledImage(Dest, x, y, iTick, iDirection, 24, 24, CObjectImageArray::FLAG_CACHED);
+	m_Image.GetSimpleImage().PaintScaledImage(Dest, x, y, iTick, iDirection, 24, 24, CObjectImageArray::FLAG_CACHED);
 	}
 
 void CShipClass::PaintScaled (CG32bitImage &Dest,
@@ -4577,7 +4194,7 @@ void CShipClass::PaintScaled (CG32bitImage &Dest,
 		Dest.Blt(0, 0, Image.GetWidth(), Image.GetHeight(), Image, x - (Image.GetWidth() / 2), y - (Image.GetHeight() / 2));
 		}
 	else
-		GetImage().PaintScaledImage(Dest, x, y, iTick, GetRotationDesc().GetFrameIndex(iRotation), cxWidth, cyHeight, CObjectImageArray::FLAG_CACHED);
+		m_Image.GetSimpleImage().PaintScaledImage(Dest, x, y, iTick, GetRotationDesc().GetFrameIndex(iRotation), cxWidth, cyHeight, CObjectImageArray::FLAG_CACHED);
 	}
 
 void CShipClass::PaintThrust (CG32bitImage &Dest, 

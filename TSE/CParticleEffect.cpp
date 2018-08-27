@@ -721,18 +721,15 @@ void CParticleEffect::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 
 							if (mathRandom(1, 1000) < (iDensity * iSpeed))
 								{
-								SDamageCtx Ctx;
-								Ctx.pObj = pObj;
-								Ctx.pDesc = pType->pDamageDesc;
-								Ctx.Damage = pType->pDamageDesc->GetDamage();
-								if (IsAutomatedWeapon())
-									Ctx.Damage.SetAutomatedWeapon();
-								Ctx.iDirection = VectorToPolar(vDeltaV);
-								Ctx.vHitPos = pObj->GetPos();
-								Ctx.pCause = this;
-								Ctx.Attacker = CDamageSource(this, killedByDamage);
+								SDamageCtx DamageCtx(pObj,
+										pType->pDamageDesc,
+										NULL,
+										CDamageSource(this, killedByDamage),
+										this,
+										VectorToPolar(vDeltaV),
+										pObj->GetPos());
 
-								pObj->Damage(Ctx);
+								pObj->Damage(DamageCtx);
 								}
 							}
 						}
@@ -1137,7 +1134,7 @@ void CParticleEffect::PaintSmokeParticles (SParticleArray *pGroup, CG32bitImage 
 		}
 	}
 
-bool CParticleEffect::PointInObject (const CVector &vObjPos, const CVector &vPointPos)
+bool CParticleEffect::PointInObject (const CVector &vObjPos, const CVector &vPointPos) const
 
 //	PointInObject
 //

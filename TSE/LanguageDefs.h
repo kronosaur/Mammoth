@@ -5,34 +5,59 @@
 
 #include "PreComp.h"
 
+//	Gender Words
+
+struct SStaticGenderWord
+	{
+	const char *pszKey;
+	const char *pszText[genomeCount];
+	};
+
+static TStaticStringTable<SStaticGenderWord, 8> GENDER_WORD_TABLE = {
+	"brother",		{ "partner",	"brother",	"sister",	"partner", },
+	"he",			{ "they",		"he",		"she",		"it", },
+	"hers",			{ "theirs",		"his",		"hers",		"its", },
+	"him",			{ "them",		"him",		"her",		"it", },
+	"his",			{ "their",		"his",		"her",		"its", },
+	"man",			{ "person",		"man",		"woman",	"creature", },
+	"sir",			{ "sir",		"sir",		"ma'am",	"sir", },
+	"son",			{ "child",		"son",		"daughter", "child", },
+	};
+
 //	Convert from a string to NounPhraseFlags
 
-static TStaticStringTable<TStaticStringEntry<DWORD>, 20> NOUN_FLAG_TABLE = {
+static TStaticStringTable<TStaticStringEntry<DWORD>, 21> NOUN_FLAG_TABLE = {
 	"actual",				nounActual,
 	"adjective",			nounAdjective,
 	"article",				nounArticle,
 	"capitalize",			nounCapitalize,
 	"count",				nounCount,
+
 	"countAlways",			nounCountAlways,
 	"countOnly",			nounCountOnly,
 	"demonstrative",		nounDemonstrative,
 	"demonym",				nounDemonym,
 	"duplicateModifier",	nounDuplicateModifier,
+
+	"escapeQuotes",			nounEscapeQuotes,
 	"generic",				nounGeneric,
 	"installedState",		nounInstalledState,
 	"noDeterminer",			nounNoDeterminer,
 	"noEvent",				nounNoEvent,
+
 	"noModifiers",			nounNoModifiers,
 	"noQuotes",				nounNoQuotes,
 	"plural",				nounPlural,
 	"short",				nounShort,
 	"titleCapitalize",		nounTitleCapitalize,
+
 	"tokenize",				nounTokenize,
 	};
 
-static TStaticStringTable<TStaticStringEntry<CLanguage::ENumberFormatTypes>, 4> NUMBER_FORMAT_TABLE = {
+static TStaticStringTable<TStaticStringEntry<CLanguage::ENumberFormatTypes>, 5> NUMBER_FORMAT_TABLE = {
 	"integer",				CLanguage::numberInteger,
 	"power",				CLanguage::numberPower,
+	"real",					CLanguage::numberReal,
 	"regenRate",			CLanguage::numberRegenRate,
 	"speed",				CLanguage::numberSpeed,
 	};

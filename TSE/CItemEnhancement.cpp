@@ -134,6 +134,10 @@ void CItemEnhancement::AccumulateAttributes (CItemCtx &Ctx, TArray<SDisplayAttri
 					retList->Insert(SDisplayAttribute(attribPositive, CONSTLIT("+shield penetrate"), true));
 					break;
 
+				case specialTimeStop:
+					retList->Insert(SDisplayAttribute(attribPositive, CONSTLIT("+time stop"), true));
+					break;
+
 				case specialWMD:
 					retList->Insert(SDisplayAttribute(attribPositive, strPatternSubst(CONSTLIT("+WMD %d"), DamageDesc::GetMassDestructionLevelFromValue(iLevel))));
 					break;
@@ -161,6 +165,10 @@ void CItemEnhancement::AccumulateAttributes (CItemCtx &Ctx, TArray<SDisplayAttri
 		case etSpeed:
 		case etSpeedOld:
 			retList->Insert(SDisplayAttribute(iDisplayType, (IsDisadvantage() ? CONSTLIT("-slow") : CONSTLIT("+fast")), true));
+			break;
+
+		case etTracking:
+			retList->Insert(SDisplayAttribute(iDisplayType, (IsDisadvantage() ? CONSTLIT("-blinded") : CONSTLIT("+tracking")), true));
 			break;
 
 		default:
@@ -462,6 +470,17 @@ EnhanceItemStatus CItemEnhancement::CombineAdvantageWithAdvantage (const CItem &
 				return eisEnhancementReplaced;
 				}
 			else if (Enhancement.GetLevel() > GetLevel())
+				{
+				*this = Enhancement;
+				return eisBetter;
+				}
+			else
+				return eisNoEffect;
+			}
+
+		case etTracking:
+			{
+			if (Enhancement.GetDataX() > GetDataX())
 				{
 				*this = Enhancement;
 				return eisBetter;
@@ -980,6 +999,9 @@ CString CItemEnhancement::GetEnhancedDesc (const CItem &Item, CSpaceObject *pIns
 		case etSpeedOld:
 			return (IsDisadvantage() ? CONSTLIT("-slow") : CONSTLIT("+fast"));
 
+		case etTracking:
+			return (IsDisadvantage() ? CONSTLIT("-blinded") : CONSTLIT("+tracking"));
+
 		default:
 			return CONSTLIT("+unknown");
 		}
@@ -1117,6 +1139,23 @@ int CItemEnhancement::GetHPAdj (void) const
 
 		default:
 			return 100;
+		}
+	}
+
+int CItemEnhancement::GetManeuverRate (void) const
+
+//	GetManeuverRate
+//
+//	Returns the tracking maneuver rate.
+
+	{
+	switch (GetType())
+		{
+		case etTracking:
+			return GetDataX();
+
+		default:
+			return 0;
 		}
 	}
 
@@ -1318,6 +1357,7 @@ int CItemEnhancement::GetValueAdj (const CItem &Item) const
 			case etReflect:
 			case etSpecialDamage:
 			case etImmunityIonEffects:
+			case etTracking:
 				return 100;
 
 			default:
@@ -1368,6 +1408,7 @@ ALERROR CItemEnhancement::InitFromDesc (const CString &sDesc, CString *retsError
 //	+resistMatter:{n}			DamageAdj for matter damage set to n
 //	+shield:{n}					Add shield disrupt special damage, where n is an item level
 //	+speed:{n}					Faster. n is new delay value as a percent of normal
+//	+tracking:{n}				n is maneuver rate
 
 	{
 	//	If the string is a number then we interpret it as a mod code.
@@ -1645,6 +1686,18 @@ ALERROR CItemEnhancement::InitFromDesc (const CString &sDesc, CString *retsError
 			SetModSpeed(iValue);
 		}
 
+	else if (strEquals(sID, CONSTLIT("tracking")))
+		{
+		if (iValue < 0)
+			{
+			if (retsError)
+				*retsError = strPatternSubst(CONSTLIT("Invalid maneuver rate: %s."), iValue);
+			return ERR_FAIL;
+			}
+		else
+			SetModTracking(Min(iValue, 180));
+		}
+
 	//	Otherwise, see if this is a special damage 
 
 	else
@@ -1664,6 +1717,7 @@ ALERROR CItemEnhancement::InitFromDesc (const CString &sDesc, CString *retsError
 			case specialShatter:
 			case specialShieldDisrupt:
 			case specialShieldPenetrator:
+			case specialTimeStop:
 			case specialWMD:
 				{
 				if (bDisadvantage)
@@ -1870,6 +1924,16 @@ void CItemEnhancement::SetModSpeed (int iAdj, int iMinDelay, int iMaxDelay)
 		m_dwMods = EncodeABC(etSpeed, iAdj, iMinDelay, iMaxDelay);
 	else
 		m_dwMods = EncodeABC(etSpeed | etDisadvantage, (iAdj - 100) / 5, iMinDelay, iMaxDelay);
+	}
+
+void CItemEnhancement::SetModTracking (int iManeuverRate)
+
+//	SetModTracking
+//
+//	Sets a maneuver rate enhancement.
+
+	{
+	m_dwMods = EncodeAX(etTracking, 0, iManeuverRate);
 	}
 
 bool CItemEnhancement::UpdateArmorRegen (CItemCtx &ArmorCtx, SUpdateCtx &UpdateCtx, int iTick) const

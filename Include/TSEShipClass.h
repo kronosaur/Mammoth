@@ -5,6 +5,123 @@
 
 #pragma once
 
+//	Hull Descriptor ------------------------------------------------------------
+
+class CHullDesc
+	{
+	public:
+		ALERROR Bind (SDesignLoadCtx &Ctx);
+		int CalcArmorSpeedBonus (int iSegmentCount, int iTotalArmorMass) const;
+		ICCItem *CalcMaxSpeedByArmorMass (CCodeChainCtx &Ctx, int iStdSpeed) const;
+		inline const CItemCriteria &GetArmorCriteria (void) const { return m_ArmorCriteria; }
+		inline int GetCargoSpace (void) const { return m_iCargoSpace; }
+		inline int GetCyberDefenseLevel (void) const { return m_iCyberDefenseLevel; }
+		inline const CItemCriteria &GetDeviceCriteria (void) const { return m_DeviceCriteria; }
+		inline Metric GetExtraPoints (void) const { return m_rExtraPoints; }
+		inline int GetMass (void) const { return m_iMass; }
+		inline int GetMaxArmorMass (void) const { return m_iMaxArmorMass; }
+		inline int GetMaxArmorSpeedPenalty (void) const { return m_iMaxArmorSpeedPenalty; }
+		inline int GetMaxCargoSpace (void) const { return m_iMaxCargoSpace; }
+		inline int GetMaxDevices (void) const { return m_iMaxDevices; }
+		inline int GetMaxNonWeapons (void) const { return m_iMaxNonWeapons; }
+		inline int GetMaxReactorPower (void) const { return m_iMaxReactorPower; }
+		inline int GetMaxWeapons (void) const { return m_iMaxWeapons; }
+		inline int GetMinArmorSpeedBonus (void) const { return m_iMinArmorSpeedBonus; }
+		inline int GetSize (void) const { return m_iSize; }
+		inline int GetStdArmorMass (void) const { return m_iStdArmorMass; }
+		inline const CCurrencyAndValue &GetValue (void) const { return m_Value; }
+		inline void InitCyberDefenseLevel (int iLevel) { if (m_iCyberDefenseLevel == -1) m_iCyberDefenseLevel = iLevel; }
+		void InitDefaultArmorLimits (int iMaxSpeed, Metric rThrustRatio);
+		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, int iMaxSpeed);
+		inline bool IsTimeStopImmune (void) const { return m_bTimeStopImmune; }
+		inline void SetSize (int iSize) { m_iSize = iSize; }
+		inline void SetMaxCargoSpace (int iCargoSpace) { m_iMaxCargoSpace = iCargoSpace; }
+		inline void SetValue (const CCurrencyAndValue &Value) { m_Value = Value; }
+
+	private:
+		int CalcMinArmorMassForSpeed (int iSpeed, int iStdSpeed) const;
+
+		int m_iSize = 0;					//	Length of ship in meters
+		int m_iMass = 0;					//	Empty hull mass (tons)
+		CCurrencyAndValue m_Value;			//	Value of hull alone (excluding any devices/armor)
+		int m_iCargoSpace = 0;				//	Default cargo space (tons)
+
+		CItemCriteria m_ArmorCriteria;		//	Allowable armor
+		CItemCriteria m_DeviceCriteria;		//	Allowable devices
+		int m_iStdArmorMass = 0;			//	No penalty at this armor mass
+		int m_iMaxArmorMass = 0;			//	Max mass of single armor segment
+		int m_iMaxArmorSpeedPenalty = 0;	//	Change to speed at max armor mass (1/100th light-speed)
+		int m_iMinArmorSpeedBonus = 0;		//	Change to speed at 1/2 std armor mass
+
+		int m_iMaxCargoSpace = 0;			//	Max amount of cargo space with expansion (tons)
+		int m_iMaxReactorPower = 0;			//	Max compatible reactor power
+		int m_iMaxDevices = 0;				//	Max number of devices
+		int m_iMaxWeapons = 0;				//	Max number of weapon devices (including launchers)
+		int m_iMaxNonWeapons = 0;			//	Max number of non-weapon devices
+
+		Metric m_rExtraPoints = 0.0;		//	Extra point to calculate hull value
+
+		int m_iCyberDefenseLevel = -1;		//	-1 = same as ship level
+
+		bool m_bTimeStopImmune = false;		//	If TRUE, we're immune to timestop
+	};
+
+//	Wreck Descriptor -----------------------------------------------------------
+
+class CShipwreckDesc
+	{
+	public:
+		void AddTypesUsed (TSortMap<DWORD, bool> *retTypesUsed) const;
+		ALERROR Bind (SDesignLoadCtx &Ctx);
+		void CleanUp (void);
+		void ClearMarks (void);
+		bool CreateEmptyWreck (CSystem *pSystem, CShipClass *pClass, CShip *pShip, const CVector &vPos, const CVector &vVel, CSovereign *pSovereign, CStation **retpWreck) const;
+		bool CreateWreck (CShip *pShip, CSpaceObject **retpWreck) const;
+		void CreateWreckImage (DWORD dwShipClass, const CObjectImageArray &ShipImage);
+		inline CWeaponFireDesc *GetExplosionType (void) const { return m_pExplosionType; }
+		inline int GetStructuralHP (void) const { return m_iStructuralHP; }
+		inline int GetWreckChance (void) const { return m_iLeavesWreck; }
+		inline CObjectImageArray &GetWreckImage (void) { return m_WreckImage; }
+		inline int GetWreckImageVariants (void) const { return WRECK_IMAGE_VARIANTS; }
+		CStationType *GetWreckType (void) const;
+		inline bool HasWreckImage (void) const { return m_WreckImage.IsLoaded(); }
+		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, Metric rHullMass);
+		inline bool IsRadioactive (void) const { return m_bRadioactiveWreck; }
+		void MarkImages (void);
+		void SweepImages (void);
+
+		static void UnbindGlobal (void);
+		
+	private:
+		void AddItemsToWreck (CShip *pShip, CSpaceObject *pWreck) const;
+		int CalcDeviceComponentChance (const CItem &Item, bool bDropDamaged) const;
+		inline int CalcDeviceDestroyChance (void) const { return 100 - Min(GetWreckChance(), 50); }
+		ItemFates CalcDeviceFate (CShip *pSource, const CItem &Item, CSpaceObject *pWreck, bool bDropDamaged) const;
+
+		static constexpr int WRECK_IMAGE_VARIANTS =		3;
+		static constexpr int DAMAGE_IMAGE_COUNT =		10;
+		static constexpr int DAMAGE_IMAGE_WIDTH	=		24;
+		static constexpr int DAMAGE_IMAGE_HEIGHT =		24;
+
+		static constexpr int DEVICE_DAMAGED_CHANCE =	80;
+		static constexpr int DROP_COMPONENTS_CHANCE =	50;
+
+		int m_iLeavesWreck = 0;					//	Chance that it leaves a wreck
+		int m_iStructuralHP = 0;				//	Structual hp of wreck (0 = undefined)
+		CStationTypeRef m_pWreckType;			//	Station type to use as wreck
+		CWeaponFireDescRef m_pExplosionType;	//	Explosion to create when ship is destroyed
+
+		CG32bitImage m_WreckBitmap;				//	Image to use when ship is wrecked
+		CObjectImageArray m_WreckImage;			//	Image to use when ship is wrecked
+
+		bool m_bRadioactiveWreck = false;		//	TRUE if wreck is always radioactive
+
+		static CG32bitImage *m_pDamageBitmap;
+		static CStationType *m_pWreckDesc;
+	};
+
+//	Ship Class -----------------------------------------------------------------
+
 class CShipClass : public CDesignType
 	{
 	public:
@@ -25,6 +142,11 @@ class CShipClass : public CDesignType
 			typeArmorTooStrong,
 			typeWeaponsTooWeak,
 			typeWeaponsTooStrong,
+			};
+
+		enum ECategoryFlags
+			{
+			catCapitalShip = 0x00000001,		//	Capital ship (based on mass)
 			};
 
 		enum VitalSections
@@ -66,7 +188,6 @@ class CShipClass : public CDesignType
 		Metric CalcMass (const CDeviceDescList &Devices) const;
 		int CalcScore (void);
 		bool CreateEmptyWreck (CSystem *pSystem, CShip *pShip, const CVector &vPos, const CVector &vVel, CSovereign *pSovereign, CStation **retpWreck);
-		void CreateExplosion (CShip *pShip, CSpaceObject *pWreck = NULL);
 		void CreateImage (CG32bitImage &Dest, int iTick, int iRotation, Metric rScale = 1.0);
 		void CreateScaledImage (CG32bitImage &Dest, int iTick, int iRotation, int cxWidth, int cyHeight);
 		bool CreateWreck (CShip *pShip, CSpaceObject **retpWreck = NULL);
@@ -79,11 +200,12 @@ class CShipClass : public CDesignType
 		CString GenerateShipName (DWORD *retdwFlags) const;
 		inline const CAISettings &GetAISettings (void) { return m_AISettings; }
         inline const CShipArmorDesc &GetArmorDesc (void) const { return m_Armor; }
+		DWORD GetCategoryFlags (void) const;
         const CCargoDesc &GetCargoDesc (const CItem **retpCargoItem = NULL) const;
 		inline CGenericType *GetCharacter (void) { return m_Character; }
 		inline CGenericType *GetCharacterClass (void) { return m_CharacterClass; }
 		inline Metric GetCombatStrength (void) const { return m_rCombatStrength; }
-		inline int GetCyberDefenseLevel (void) const { return m_iCyberDefenseLevel; }
+		inline int GetCyberDefenseLevel (void) const { return m_Hull.GetCyberDefenseLevel(); }
 		inline DWORD GetDefaultBkgnd (void) const { return m_dwDefaultBkgnd; }
 		inline CDesignType *GetDefaultEventHandler (void) const { return m_EventHandler; }
 		inline CSovereign *GetDefaultSovereign (void) const { return m_pDefaultSovereign; }
@@ -103,7 +225,8 @@ class CShipClass : public CDesignType
 		inline int GetHullSectionCount (void) const { return m_Armor.GetCount(); }
 		CString GetHullSectionName (int iIndex) const;
 		CCurrencyAndValue GetHullValue (CShip *pShip = NULL) const;
-		inline const CObjectImageArray &GetImage (void) const { return m_Image.GetSimpleImage(); }
+		const CObjectImageArray &GetImage (const CImageFilterStack *pFilters = NULL) const;
+		inline int GetImageViewportSize (void) const { return m_Image.GetSimpleImage().GetImageViewportSize(); }
         inline const CAttributeDataBlock &GetInitialData (void) const { return m_InitialData; }
 		inline const CShipInteriorDesc &GetInteriorDesc (void) const { return m_Interior; }
 		int GetMaxStructuralHitPoints (void) const;
@@ -121,10 +244,9 @@ class CShipClass : public CDesignType
 		inline const CString &GetClassName (void) const { return m_sName; }
 		inline const CString &GetManufacturerName (void) const { return m_sManufacturer; }
 		inline const CString &GetShipTypeName (void) const { return m_sTypeName; }
-		inline int GetWreckChance (void) { return m_iLeavesWreck; }
-		CObjectImageArray &GetWreckImage (void) { if (!m_WreckImage.IsLoaded()) CreateWreckImage(); return m_WreckImage; }
-		void GetWreckImage (CObjectImageArray *retWreckImage);
-		int GetWreckImageVariants (void);
+		inline int GetWreckChance (void) const { return m_WreckDesc.GetWreckChance(); }
+		inline CObjectImageArray &GetWreckImage (void) { if (!m_WreckDesc.HasWreckImage()) m_WreckDesc.CreateWreckImage(GetUNID(), GetImage()); return m_WreckDesc.GetWreckImage(); }
+		inline int GetWreckImageVariants (void) const { return m_WreckDesc.GetWreckImageVariants(); }
 		inline bool HasDockingPorts (void) { return (m_fHasDockingPorts ? true : false); }
 		inline bool HasShipName (void) const { return !m_sShipNames.IsBlank(); }
 		void InitEffects (CShip *pShip, CObjectEffectList *retEffects);
@@ -135,7 +257,7 @@ class CShipClass : public CDesignType
 		inline bool IsPlayerShip (void) { return (GetPlayerSettings() != NULL); }
 		inline bool IsShipSection (void) const { return m_fShipCompartment; }
 		inline bool IsShownAtNewGame (void) const { const CPlayerSettings *pPlayerSettings = GetPlayerSettings(); return (pPlayerSettings && pPlayerSettings->IsInitialClass() && !IsVirtual()); }
-		inline bool IsTimeStopImmune (void) { return (m_fTimeStopImmune ? true : false); }
+		inline bool IsTimeStopImmune (void) { return m_Hull.IsTimeStopImmune(); }
 		void MarkImages (bool bMarkDevices);
 		void Paint (CG32bitImage &Dest, 
 					int x, 
@@ -164,6 +286,13 @@ class CShipClass : public CDesignType
 					int cyHeight,
 					int iRotation,
 					int iTick);
+		void PaintThrust (CG32bitImage &Dest, 
+						int x, 
+						int y, 
+						const ViewportTransform &Trans, 
+						int iDirection, 
+						int iTick,
+						bool bInFrontOnly);
 
 		//	CDesignType overrides
 		static CShipClass *AsType (CDesignType *pType) { return ((pType && pType->GetType() == designShipClass) ? (CShipClass *)pType : NULL); }
@@ -187,6 +316,7 @@ class CShipClass : public CDesignType
 		virtual void OnAccumulateXMLMergeFlags (TSortMap<DWORD, DWORD> &MergeFlags) const override;
 		virtual void OnAddTypesUsed (TSortMap<DWORD, bool> *retTypesUsed) override;
 		virtual ALERROR OnBindDesign (SDesignLoadCtx &Ctx) override;
+		virtual void OnClearMark (void) override { m_WreckDesc.ClearMarks(); }
 		virtual ALERROR OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc) override;
 		virtual CEffectCreator *OnFindEffectCreator (const CString &sUNID) override;
 		virtual ALERROR OnFinishBindDesign (SDesignLoadCtx &Ctx) override;
@@ -238,20 +368,12 @@ class CShipClass : public CDesignType
 						  int iThrust,
 						  int iManeuver,
 						  bool bPrimaryIsLauncher);
-		void CreateWreckImage (void);
 		void FindBestMissile (CDeviceClass *pLauncher, IItemGenerator *pItems, CItemType **retpMissile) const;
 		void FindBestMissile (CDeviceClass *pLauncher, const CItemList &Items, CItemType **retpMissile) const;
 		CString GetGenericName (DWORD *retdwFlags = NULL) const;
 		inline int GetManeuverDelay (void) const { return m_Perf.GetRotationDesc().GetManeuverDelay(); }
-		CStationType *GetWreckDesc (void);
+		inline CStationType *GetWreckDesc (void) const { return m_WreckDesc.GetWreckType(); }
 		void InitShipNamesIndices (void);
-		void PaintThrust (CG32bitImage &Dest, 
-						int x, 
-						int y, 
-						const ViewportTransform &Trans, 
-						int iDirection, 
-						int iTick,
-						bool bInFrontOnly);
 
 		static int CalcDefaultSize (const CObjectImageArray &Image);
 
@@ -278,13 +400,7 @@ class CShipClass : public CDesignType
 		double m_rThrustRatio;					//	If non-zero, then m_DriveDesc thrust is set based on this.
 		CDriveDesc m_DriveDesc;					//	Drive descriptor
 		CReactorDesc m_ReactorDesc;				//	Reactor descriptor
-		int m_iCyberDefenseLevel;				//	Cyber defense level
-
-        //  Wrecks
-
-		int m_iLeavesWreck;						//	Chance that it leaves a wreck
-		int m_iStructuralHP;					//	Structual hp of wreck
-		CStationTypeRef m_pWreckType;				//	Station type to use as wreck
+		CShipwreckDesc m_WreckDesc;				//	Wreck descriptor
 
         //  Armor, Devices, Equipment, Etc.
 
@@ -332,15 +448,6 @@ class CShipClass : public CDesignType
         CObjectImageArray m_HeroImage;          //  Large image
 		CObjectEffectDesc m_Effects;			//	Effects for ship
 
-		//	Wreck image
-
-		CG32bitImage m_WreckBitmap;				//	Image to use when ship is wrecked
-		CObjectImageArray m_WreckImage;			//	Image to use when ship is wrecked
-
-		//	Explosion
-
-		CWeaponFireDescRef m_pExplosionType;	//	Explosion to create when ship is destroyed
-
 		//	Exhaust
 
 		CObjectImageArray m_ExhaustImage;		//	Image of drive exhaust
@@ -348,34 +455,25 @@ class CShipClass : public CDesignType
 
 		//	Misc
 
-		DWORD m_fRadioactiveWreck:1;			//	TRUE if wreck is always radioactive
 		DWORD m_fHasDockingPorts:1;				//	TRUE if ship has docking ports
-		DWORD m_fTimeStopImmune:1;				//	TRUE if ship is immune to stop-time
-		DWORD m_fSpare4a:1;						//	Unused
-		DWORD m_fSpare5a:1;						//	Unused
-		DWORD m_fSpare6a:1;						//	Unused
 		DWORD m_fCommsHandlerInit:1;			//	TRUE if comms handler has been initialized
 		DWORD m_fVirtual:1;						//	TRUE if ship class is virtual (e.g., a base class)
-
 		DWORD m_fOwnPlayerSettings:1;		    //	TRUE if we own m_pPlayerSettings
 		DWORD m_fScoreOverride:1;				//	TRUE if score is specified in XML
 		DWORD m_fLevelOverride:1;				//	TRUE if level is specified in XML
 		DWORD m_fInheritedDevices:1;			//	TRUE if m_pDevices is inherited from another class
 		DWORD m_fInheritedItems:1;				//	TRUE if m_pItems is inherited from another class
-		DWORD m_fInheritedEscorts:1;			//	TRUE if m_pEscorts is inherited from another class
-		DWORD m_fCyberDefenseOverride:1;		//	TRUE if cyberDefenseLevel is specified in XML
-		DWORD m_fInheritedTrade:1;				//	TRUE if m_pTrade is inherited from another class
 
+		DWORD m_fInheritedEscorts:1;			//	TRUE if m_pEscorts is inherited from another class
+		DWORD m_fInheritedTrade:1;				//	TRUE if m_pTrade is inherited from another class
 		DWORD m_fShipCompartment:1;				//	TRUE if we represent an attached compartment/segment
 		DWORD m_fInheritedDeviceSlots:1;		//	TRUE if m_pDeviceSlots is inherited from another class
-		DWORD m_fSpare3:1;
-		DWORD m_fSpare4:1;
 		DWORD m_fSpare5:1;
 		DWORD m_fSpare6:1;
 		DWORD m_fSpare7:1;
 		DWORD m_fSpare8:1;
 
-		DWORD m_fSpare:8;
+		DWORD m_fSpare:16;
 
 		static CPlayerSettings m_DefaultPlayerSettings;
 		static bool m_bDefaultPlayerSettingsBound;

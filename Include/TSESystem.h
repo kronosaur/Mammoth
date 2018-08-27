@@ -13,29 +13,6 @@
 
 const int MIN_PLANET_SIZE = 1000;			//	Size at which a world is considered planetary size
 
-struct SShotCreateCtx
-	{
-	enum Flags
-		{
-		//	CreateWeaponFire flags
-		CWF_WEAPON_FIRE =				0x00000001,	//	Creating a shot from a weapon
-		CWF_FRAGMENT =					0x00000002,	//	Creating a fragment
-		CWF_EXPLOSION =					0x00000004,	//	Creating an explosion (or fragment of an explosion)
-		CWF_EJECTA =					0x00000008,	//	Creating ejecta (or fragments of ejecta)
-		CWF_REPEAT =					0x00000010,	//	Mixed with CWF_WEAPON_FIRE to indicate this is a repeat
-		};
-
-	CWeaponFireDesc *pDesc = NULL;
-	TSharedPtr<CItemEnhancementStack> pEnhancements;
-	CDamageSource Source;
-	CVector vPos;
-	CVector vVel;
-	int iDirection = 0;
-	int iRepeatingCount = 0;
-	CSpaceObject *pTarget = NULL;
-	DWORD dwFlags = 0;
-	};
-
 //	CNavigationPath
 
 class CNavigationPath : public TSEListNode<CNavigationPath>
@@ -55,6 +32,7 @@ class CNavigationPath : public TSEListNode<CNavigationPath>
 		inline DWORD GetID (void) const { return m_dwID; }
 		inline int GetNavPointCount (void) const { return m_iWaypointCount; }
 		CVector GetNavPoint (int iIndex) const;
+		inline CVector GetPathEnd (void) const { return GetNavPoint(GetNavPointCount() - 1); }
 		bool Matches (CSovereign *pSovereign, CSpaceObject *pStart, CSpaceObject *pEnd);
 		void OnReadFromStream (SLoadCtx &Ctx);
 		void OnWriteToStream (CSystem *pSystem, IWriteStream *pStream) const;
@@ -677,6 +655,7 @@ class CSystem
 			//	PaintViewport flags
 			VWP_ENHANCED_DISPLAY =			0x00000001,	//	Show enhanced display markers
 			VWP_NO_STAR_FIELD =				0x00000002,	//	Do not paint star field background
+			VWP_MINING_DISPLAY =			0x00000004,	//	Show unexplored asteroids
 			};
 
 		//	System methods
@@ -752,19 +731,20 @@ class CSystem
 		void CancelTimedEvent (CDesignType *pSource, const CString &sEvent, bool bInDoEvent = false);
 		bool DescendObject (DWORD dwObjID, const CVector &vPos, CSpaceObject **retpObj = NULL, CString *retsError = NULL);
 		inline bool EnemiesInLRS (void) const { return m_fEnemiesInLRS; }
-		inline void EnumObjectsInBoxStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags = 0) { m_ObjGrid.EnumStart(i, vUR, vLL, dwFlags); }
-		inline void EnumObjectsInBoxStart (SSpaceObjectGridEnumerator &i, const CVector &vPos, Metric rRange, DWORD dwFlags = 0)
+		inline void EnumObjectsInBoxStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags = 0) const { m_ObjGrid.EnumStart(i, vUR, vLL, dwFlags); }
+		inline void EnumObjectsInBoxStart (SSpaceObjectGridEnumerator &i, const CVector &vPos, Metric rRange, DWORD dwFlags = 0) const
 			{
 			CVector vRange = CVector(rRange, rRange);
 			CVector vUR = vPos + vRange;
 			CVector vLL = vPos - vRange;
 			m_ObjGrid.EnumStart(i, vUR, vLL, dwFlags);
 			}
-		inline bool EnumObjectsInBoxHasMore (SSpaceObjectGridEnumerator &i) { return i.bMore; }
-		inline CSpaceObject *EnumObjectsInBoxGetNext (SSpaceObjectGridEnumerator &i) { return m_ObjGrid.EnumGetNext(i); }
-		inline CSpaceObject *EnumObjectsInBoxGetNextFast (SSpaceObjectGridEnumerator &i) { return m_ObjGrid.EnumGetNextFast(i); }
-		inline CSpaceObject *EnumObjectsInBoxPointGetNext (SSpaceObjectGridEnumerator &i) { return m_ObjGrid.EnumGetNextInBoxPoint(i); }
+		inline bool EnumObjectsInBoxHasMore (SSpaceObjectGridEnumerator &i) const { return i.bMore; }
+		inline CSpaceObject *EnumObjectsInBoxGetNext (SSpaceObjectGridEnumerator &i) const { return m_ObjGrid.EnumGetNext(i); }
+		inline CSpaceObject *EnumObjectsInBoxGetNextFast (SSpaceObjectGridEnumerator &i) const { return m_ObjGrid.EnumGetNextFast(i); }
+		inline CSpaceObject *EnumObjectsInBoxPointGetNext (SSpaceObjectGridEnumerator &i) const { return m_ObjGrid.EnumGetNextInBoxPoint(i); }
 		CSpaceObject *FindObject (DWORD dwID);
+		CSpaceObject *FindObjectInRange (const CVector &vCenter, Metric rRange, const CSpaceObjectCriteria &Criteria = CSpaceObjectCriteria()) const;
         CSpaceObject *FindObjectWithOrbit (const COrbit &Orbit) const;
 		bool FindObjectName (CSpaceObject *pObj, CString *retsName = NULL);
 		void FireOnSystemExplosion (CSpaceObject *pExplosion, CWeaponFireDesc *pDesc, const CDamageSource &Source);
@@ -901,7 +881,6 @@ class CSystem
 		void CalcObjGrid (SUpdateCtx &Ctx);
 		void CalcViewportCtx (SViewportPaintCtx &Ctx, const RECT &rcView, CSpaceObject *pCenter, DWORD dwFlags);
 		void CalcVolumetricMask (CSpaceObject *pStar, CG8bitSparseImage &VolumetricMask);
-		void ComputeMapLabels (void);
 		void ComputeRandomEncounters (void);
 		void ComputeStars (void);
 		ALERROR CreateStationInt (SSystemCreateCtx *pCtx,

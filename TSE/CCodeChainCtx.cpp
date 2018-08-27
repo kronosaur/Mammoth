@@ -15,6 +15,7 @@
 #define STR_G_DATA								CONSTLIT("gData")
 #define STR_G_ITEM								CONSTLIT("gItem")
 #define STR_G_SOURCE							CONSTLIT("gSource")
+#define STR_G_TYPE								CONSTLIT("gType")
 
 TArray<CCodeChainCtx::SInvokeFrame> CCodeChainCtx::g_Invocations;
 
@@ -32,6 +33,7 @@ CCodeChainCtx::CCodeChainCtx (void) :
 		m_pOldSource(NULL),
 		m_pOldItem (NULL),
 		m_pOldOverlayID(NULL),
+		m_pOldType(NULL),
 		m_bRestoreGlobalDefineHook(false),
 		m_pOldGlobalDefineHook(NULL)
 
@@ -247,6 +249,46 @@ void CCodeChainCtx::DefineDamageEffects (const CString &sVar, SDamageCtx &Ctx)
 	pItem->Discard(&m_CC);
 	}
 
+void CCodeChainCtx::DefineContainingType (CDesignType *pType)
+
+//	DefineContainingType
+//
+//	Defines an containing type
+
+	{
+	SaveAndDefineType(pType ? pType->GetUNID() : 0);
+	}
+
+void CCodeChainCtx::DefineContainingType (const CItem &Item)
+
+//	DefineContainingType
+//
+//	Defines an containing type
+
+	{
+	DefineContainingType(Item.GetType());
+	}
+
+void CCodeChainCtx::DefineContainingType (const COverlay *pOverlay)
+
+//	DefineContainingType
+//
+//	Defines an containing type
+
+	{
+	DefineContainingType(pOverlay->GetType());
+	}
+
+void CCodeChainCtx::DefineContainingType (CSpaceObject *pObj)
+
+//	DefineContainingType
+//
+//	Defines an containing type
+
+	{
+	DefineContainingType(pObj->GetType());
+	}
+
 void CCodeChainCtx::DefineItem (const CString &sVar, CItemCtx &ItemCtx)
 
 //	DefineItem
@@ -422,6 +464,13 @@ void CCodeChainCtx::RestoreVars (void)
 		m_pOldOverlayID->Discard(&m_CC);
 		m_pOldOverlayID = NULL;
 		}
+
+	if (m_pOldType)
+		{
+		m_CC.DefineGlobal(STR_G_TYPE, m_pOldType);
+		m_pOldType->Discard(&m_CC);
+		m_pOldType = NULL;
+		}
 	}
 
 ICCItem *CCodeChainCtx::Run (ICCItem *pCode)
@@ -457,6 +506,27 @@ ICCItem *CCodeChainCtx::Run (const SEventHandlerDesc &Event)
 	m_pExtension = Event.pExtension;
 
 	ICCItem *pResult = Run(Event.pCode);
+
+	m_pExtension = pOldExtension;
+	return pResult;
+
+	DEBUG_CATCH
+	}
+
+ICCItemPtr CCodeChainCtx::RunCode (const SEventHandlerDesc &Event)
+
+//	RunCode
+//
+//	Runs the given event and returns a result. (Which must be discarded by the
+//	caller).
+
+	{
+	DEBUG_TRY
+
+	CExtension *pOldExtension = m_pExtension;
+	m_pExtension = Event.pExtension;
+
+	ICCItemPtr pResult = ICCItemPtr(Run(Event.pCode));
 
 	m_pExtension = pOldExtension;
 	return pResult;
@@ -613,6 +683,22 @@ void CCodeChainCtx::SaveAndDefineSovereignVar (CSovereign *pSource)
 		m_pOldSource = m_CC.LookupGlobal(STR_G_SOURCE, this);
 
 	DefineInteger(STR_G_SOURCE, pSource->GetUNID());
+	}
+
+void CCodeChainCtx::SaveAndDefineType (DWORD dwUNID)
+
+//	SaveAndDefineType
+//
+//	Saves and defines gType
+
+	{
+	if (m_pOldType == NULL)
+		m_pOldType = m_CC.LookupGlobal(STR_G_TYPE, this);
+
+	if (dwUNID)
+		DefineInteger(STR_G_TYPE, dwUNID);
+	else
+		m_CC.DefineGlobal(STR_G_TYPE, m_CC.CreateNil());
 	}
 
 void CCodeChainCtx::SaveItemVar (void)

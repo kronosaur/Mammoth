@@ -384,7 +384,7 @@ void CAIBehaviorCtx::CalcInvariants (CShip *pShip)
 	//	Primary aim range
 
 	Metric rPrimaryRange = pShip->GetWeaponRange(devPrimaryWeapon);
-	Metric rAimRange = (GetFireRangeAdj() * rPrimaryRange) / (100.0 * ((pShip->GetDestiny() % 8) + 4));
+	Metric rAimRange = (GetFireRangeAdj() * rPrimaryRange) / (100.0 + ((pShip->GetDestiny() % 8) + 4));
 	if (rAimRange < 1.5 * MIN_TARGET_DIST)
 		rAimRange = 1.5 * MIN_TARGET_DIST;
 	m_rPrimaryAimRange2 = 4.0 * rAimRange * rAimRange;
@@ -563,6 +563,13 @@ bool CAIBehaviorCtx::CalcNavPath (CShip *pShip, CSpaceObject *pTo)
 	CSystem *pSystem = pShip->GetSystem();
 
 	ASSERT(pTo);
+
+	//	If the destination moves (e.g., is a ship) then we place a nav path to
+	//	where it is currenly and allow the code to recalc nav paths as
+	//	appropriate.
+
+	if (pTo->CanThrust())
+		return CalcNavPath(pShip, pTo->GetPos());
 
 	//	Figure out an appropriate starting point
 

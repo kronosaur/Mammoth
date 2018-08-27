@@ -43,7 +43,7 @@ class CAutoDefenseClass : public CDeviceClass
 
 
 		TargetingSystemTypes m_iTargeting;
-		CSpaceObject::Criteria m_TargetCriteria;
+		CSpaceObjectCriteria m_TargetCriteria;
 		Metric m_rInterceptRange;
 
 		bool m_bOmnidirectional;				//	Omnidirectional
@@ -51,8 +51,6 @@ class CAutoDefenseClass : public CDeviceClass
 		int m_iMaxFireArc;						//	Max angle of fire arc (degrees)
 		int m_iRechargeTicks;
 		CDeviceClassRef m_pWeapon;
-
-
 	};
 
 class CCargoSpaceClass : public CDeviceClass
@@ -62,9 +60,6 @@ class CCargoSpaceClass : public CDeviceClass
 
 		//	CDeviceClass virtuals
 
-		virtual bool CanBeDamaged (void) override { return false; }
-		virtual bool CanBeDisabled (CItemCtx &Ctx) override { return false; }
-		virtual bool CanBeDisrupted (void) override { return false; }
 		virtual bool FindDataField (const CString &sField, CString *retsValue) override;
 		virtual const CCargoDesc *GetCargoDesc (CItemCtx &Ctx) const override { return GetDesc(Ctx); }
 		virtual ItemCategories GetImplCategory (void) const override { return itemcatCargoHold; }
@@ -72,6 +67,9 @@ class CCargoSpaceClass : public CDeviceClass
 
 	protected:
         virtual bool OnAccumulatePerformance (CItemCtx &ItemCtx, SShipPerformanceCtx &Ctx) const override;
+		virtual bool OnCanBeDamaged (void) const override { return false; }
+		virtual bool OnCanBeDisabled (CItemCtx &Ctx) const override { return false; }
+		virtual bool OnCanBeDisrupted (void) const override { return false; }
 		virtual CString OnGetReference (CItemCtx &Ctx, const CItem &Ammo = CItem(), DWORD dwFlags = 0) override;
 
 	private:
@@ -281,7 +279,6 @@ class CReactorClass : public CDeviceClass
 
 		//	CDeviceClass virtuals
 
-		virtual bool CanBeDisabled (CItemCtx &Ctx) override { return false; }
 		virtual bool FindDataField (const CString &sField, CString *retsValue) override;
 		virtual ICCItem *FindItemProperty (CItemCtx &Ctx, const CString &sName) override;
 		virtual ItemCategories GetImplCategory (void) const override { return itemcatReactor; }
@@ -291,6 +288,7 @@ class CReactorClass : public CDeviceClass
 
 	protected:
         virtual bool OnAccumulatePerformance (CItemCtx &ItemCtx, SShipPerformanceCtx &Ctx) const override;
+		virtual bool OnCanBeDisabled (CItemCtx &Ctx) const override { return false; }
 		virtual CString OnGetReference (CItemCtx &Ctx, const CItem &Ammo = CItem(), DWORD dwFlags = 0) override;
 
 	private:
@@ -331,7 +329,14 @@ class CRepairerClass : public CDeviceClass
 			};
 
 		static ALERROR CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CItemType *pType, CDeviceClass **retpDevice);
-		inline bool FindEventHandlerRepairerClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandlerRepairerClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const 
+			{
+			if (!m_CachedEvents[iEvent].pCode)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
 
 		//	CDeviceClass virtuals
 
@@ -406,7 +411,14 @@ class CShieldClass : public CDeviceClass
 		static ALERROR CreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, CItemType *pType, CDeviceClass **retpShield);
 
 		int CalcBalance (CItemCtx &ItemCtx, SBalance &retBalance) const;
-		inline bool FindEventHandlerShieldClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandlerShieldClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const
+			{
+			if (!m_CachedEvents[iEvent].pCode)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
 
 		//	CDeviceClass virtuals
 
@@ -512,10 +524,13 @@ class CSolarDeviceClass : public CDeviceClass
 		//	CDeviceClass virtuals
 
 		virtual int CalcPowerUsed (SUpdateCtx &Ctx, CInstalledDevice *pDevice, CSpaceObject *pSource) override;
-		virtual bool CanBeDisabled (CItemCtx &Ctx) override { return false; }
 		virtual ItemCategories GetImplCategory (void) const override { return itemcatMiscDevice; }
 		virtual void Update (CInstalledDevice *pDevice, CSpaceObject *pSource, SDeviceUpdateCtx &Ctx) override;
 		virtual void OnInstall (CInstalledDevice *pDevice, CSpaceObject *pSource, CItemListManipulator &ItemList) override;
+
+	protected:
+
+		virtual bool OnCanBeDisabled (CItemCtx &Ctx) const override { return false; }
 
 	private:
 		CSolarDeviceClass (void);
@@ -531,83 +546,51 @@ class CWeaponClass : public CDeviceClass
 		enum ECachedHandlers
 			{
 			evtOnFireWeapon				= 0,
-			evtOnCounterCooldown			= 1,
+			evtGetAmmoToConsume			= 1,
+      evtOnCounterCooldown			= 2,
 
-			evtCount					= 2,
+			evtCount					= 3,
 			};
 
         struct SBalance
             {
-            SBalance (void) :
-                    rBalance(0.0),
-                    iLevel(0),
-                    rStdDamage180(0.0),
-                    rDamageHP(0.0),
-                    rDamageMult(0.0),
-                    rDamage(0.0),
-                    rDamageType(0.0),
-                    rStdAmmoCost(0.0),
-                    rStdAmmoMass(0.0),
-                    rAmmo(0.0),
-                    rOmni(0.0),
-                    rTracking(0.0),
-                    rRange(0.0),
-                    rSpeed(0.0),
-                    rProjectileHP(0.0),
-                    rPower(0.0),
-                    rCost(0.0),
-                    rSlots(0.0),
-                    rExternal(0.0),
-                    rLinkedFire(0.0),
-                    rRecoil(0.0),
-                    rRadiation(0.0),
-                    rDeviceDisrupt(0.0),
-                    rDeviceDamage(0.0),
-                    rDisintegration(0.0),
-                    rShieldPenetrate(0.0),
-                    rShatter(0.0),
-                    rShield(0.0),
-                    rArmor(0.0),
-                    rWMD(0.0),
-                    rMining(0.0)
-                { }
+            Metric rBalance = 0.0;			//  Total balance
+            int iLevel = 0;					//  Level for which we balanced
 
-            Metric rBalance;        //  Total balance
-            int iLevel;             //  Level for which we balanced
+            Metric rStdDamage180 = 0.0;		//  Standard damage (for level and fire rate)
+            Metric rDamageHP = 0.0;			//  HP damage per projectile
+            Metric rDamageMult = 0.0;		//  Effective number of projectiles
+            Metric rDamage180 = 0.0;		//  Damage per 180 ticks
+            Metric rDamage = 0.0;			//  Damage balance component
+            Metric rDamageType = 0.0;		//  Damage type balance contribution
 
-            Metric rStdDamage180;   //  Standard damage (for level and fire rate)
-            Metric rDamageHP;       //  HP damage per projectile
-            Metric rDamageMult;     //  Effective number of projectiles
-            Metric rDamage180;      //  Damage per 180 ticks
-            Metric rDamage;         //  Damage balance component
-            Metric rDamageType;     //  Damage type balance contribution
+            Metric rStdAmmoCost = 0.0;		//  Standard ammo cost (for level and fire rate)
+            Metric rStdAmmoMass = 0.0;		//  Standard ammo mass (for level and fire rate)
+            Metric rAmmo = 0.0;				//  Ammo contribution
+            Metric rOmni = 0.0;				//  Omni and swivel component
+            Metric rTracking = 0.0;			//  Tracking component
 
-            Metric rStdAmmoCost;    //  Standard ammo cost (for level and fire rate)
-            Metric rStdAmmoMass;    //  Standard ammo mass (for level and fire rate)
-            Metric rAmmo;           //  Ammo contribution
-            Metric rOmni;           //  Omni and swivel component
-            Metric rTracking;       //  Tracking component
+            Metric rRange = 0.0;			//  Range component
+            Metric rSpeed = 0.0;			//  Speed component
+            Metric rProjectileHP = 0.0;		//  HP and interaction balance component
+            Metric rPower = 0.0;			//  Power use component
+            Metric rCost = 0.0;				//  Cost component to balance
+            Metric rSlots = 0.0;			//  Slot component
+            Metric rExternal = 0.0;			//  External component
+            Metric rLinkedFire = 0.0;		//  Weapon is linked-fire
+            Metric rRecoil = 0.0;			//  Weapon has recoil
 
-            Metric rRange;          //  Range component
-            Metric rSpeed;          //  Speed component
-            Metric rProjectileHP;   //  HP and interaction balance component
-            Metric rPower;          //  Power use component
-            Metric rCost;           //  Cost component to balance
-            Metric rSlots;          //  Slot component
-            Metric rExternal;       //  External component
-            Metric rLinkedFire;     //  Weapon is linked-fire
-            Metric rRecoil;         //  Weapon has recoil
-
-            Metric rRadiation;      //  Bonus for radiation
-            Metric rDeviceDisrupt;  //  Bonus for device disrupt
-            Metric rDeviceDamage;   //  Bonus for device damage
-            Metric rDisintegration; //  Bonus for disintegration
-            Metric rShatter;        //  Bonus for shatter damage
-            Metric rShieldPenetrate;//  Bonus for shield penetration
-            Metric rShield;         //  Bonus for shield damage
-            Metric rArmor;          //  Bonus for armor damage
-            Metric rWMD;            //  Bonus for WMD
-            Metric rMining;         //  Bonus for mining
+            Metric rRadiation = 0.0;		//  Bonus for radiation
+            Metric rDeviceDisrupt = 0.0;	//  Bonus for device disrupt
+            Metric rDeviceDamage = 0.0;		//  Bonus for device damage
+            Metric rDisintegration = 0.0;	//  Bonus for disintegration
+            Metric rShatter = 0.0;			//  Bonus for shatter damage
+            Metric rShieldPenetrate = 0.0;	//  Bonus for shield penetration
+            Metric rShield = 0.0;			//  Bonus for shield damage
+            Metric rArmor = 0.0;			//  Bonus for armor damage
+            Metric rWMD = 0.0;				//  Bonus for WMD
+            Metric rMining = 0.0;			//  Bonus for mining
+			Metric rTimeStop = 0.0;			//	Bonus for time stop
             };
 
         struct SStdStats
@@ -625,7 +608,15 @@ class CWeaponClass : public CDeviceClass
 		virtual ~CWeaponClass (void);
 
 		int CalcBalance (CItemCtx &ItemCtx, SBalance &retBalance) const;
-		inline bool FindEventHandlerWeaponClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (retEvent) *retEvent = m_CachedEvents[iEvent]; return (m_CachedEvents[iEvent].pCode != NULL); }
+		inline bool FindEventHandlerWeaponClass (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const
+			{
+			if (!m_CachedEvents[iEvent].pCode)
+				return false;
+
+			if (retEvent) *retEvent = m_CachedEvents[iEvent];
+			return true;
+			}
+
         CItemType *GetAmmoItem (int iIndex) const;
         int GetAmmoItemCount (void) const;
         CWeaponFireDesc *GetWeaponFireDesc (CItemCtx &ItemCtx, const CItem &Ammo = CItem()) const;
@@ -755,7 +746,10 @@ class CWeaponClass : public CDeviceClass
 		bool ConsumeAmmo (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, int iRepeatingCount, bool *retbConsumed);
 		bool ConsumeCapacitor (CItemCtx &ItemCtx, CWeaponFireDesc *pShot);
 		void FailureExplosion (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, bool *retbSourceDestroyed);
-		void FireOnCounterCooldown (CItemCtx &ItemCtx);
+		int FireGetAmmoToConsume(CItemCtx &ItemCtx,
+							  CWeaponFireDesc *pShot,
+							  int iRepeatingCount);
+    void FireOnCounterCooldown (CItemCtx &ItemCtx);
 		EOnFireWeaponResults FireOnFireWeapon (CItemCtx &ItemCtx, 
 											   CWeaponFireDesc *pShot,
 											   const CVector &vSource,
@@ -781,6 +775,7 @@ class CWeaponClass : public CDeviceClass
 		inline bool IsLauncherWithAmmo (void) const { return (IsLauncher() && m_ShotData[0].pDesc->GetAmmoType() != NULL); }
 		bool IsOmniDirectional (CInstalledDevice *pDevice);
 		inline bool IsTemperatureEnabled (void) { return (m_Counter == cntTemperature); }
+		bool IsTracking (CItemCtx &ItemCtx, CWeaponFireDesc *pShot) const;
 		bool UpdateTemperature (CItemCtx &ItemCtx, CWeaponFireDesc *pShot, CFailureDesc::EFailureTypes *retiFailureMode, bool *retbSourceDestroyed);
 		inline bool UsesAmmo (void) const { return (m_ShotData.GetCount() > 0 && m_ShotData[0].pDesc->GetAmmoType() != NULL); }
 		bool VariantIsValid (CSpaceObject *pSource, CInstalledDevice *pDevice, CWeaponFireDesc &ShotData);
@@ -798,6 +793,7 @@ class CWeaponClass : public CDeviceClass
 		int m_iRecoil;							//	0-7 (as per momentum damage)
 		int m_iFailureChance;					//	Chance of failure
 
+		bool m_bContinuousConsumePerShot;		//	If a continuous weapon, consume ammunition for every shot in burst
 		bool m_bOmnidirectional;				//	Omnidirectional
 		bool m_bMIRV;							//	Each shot seeks an independent target
 		bool m_bReportAmmo;						//	Report count of ammo shot even if not a launcher

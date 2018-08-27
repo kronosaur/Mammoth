@@ -61,7 +61,7 @@ int CMissile::ComputeVaporTrail (void)
 
 	//	We handle this differently for maneuverable, vs non-maneuverable missiles
 
-	if (m_pDesc->IsTracking())
+	if (IsTracking())
 		{
 		if (m_iSavedRotationsCount == 0)
 			return 0;
@@ -255,6 +255,7 @@ ALERROR CMissile::Create (CSystem *pSystem, SShotCreateCtx &Ctx, CMissile **retp
 	pMissile->m_fDetonate = false;
 	pMissile->m_fPassthrough = false;
 	pMissile->m_fPainterFade = false;
+	pMissile->m_fFragment = ((Ctx.dwFlags & SShotCreateCtx::CWF_FRAGMENT) ? true : false);
 	pMissile->m_dwSpareFlags = 0;
 
 	//	If we've got a detonation interval, then set it up
@@ -276,8 +277,7 @@ ALERROR CMissile::Create (CSystem *pSystem, SShotCreateCtx &Ctx, CMissile **retp
 
 	//	Create a painter instance
 
-	bool bIsTracking = Ctx.pTarget && Ctx.pDesc->IsTracking();
-	pMissile->m_pPainter = Ctx.pDesc->CreateEffectPainter(bIsTracking, true);
+	pMissile->m_pPainter = Ctx.pDesc->CreateEffectPainter(Ctx);
 	if (pMissile->m_pPainter)
 		pMissile->SetBounds(pMissile->m_pPainter);
 
@@ -361,20 +361,15 @@ void CMissile::CreateFragments (const CVector &vPos)
 
 	//	Create the hit effect
 
-	SDamageCtx Ctx;
-	Ctx.pObj = NULL;
-	Ctx.pDesc = m_pDesc;
-	Ctx.Damage = m_pDesc->GetDamage();
-	Ctx.Damage.AddEnhancements(m_pEnhancements);
-	Ctx.Damage.SetCause(m_Source.GetCause());
-	if (IsAutomatedWeapon())
-		Ctx.Damage.SetAutomatedWeapon();
-	Ctx.iDirection = mathRandom(0, 359);
-	Ctx.vHitPos = vPos;
-	Ctx.pCause = this;
-	Ctx.Attacker = m_Source;
+	SDamageCtx DamageCtx(NULL,
+			m_pDesc,
+			m_pEnhancements,
+			m_Source,
+			this,
+			mathRandom(0, 359),
+			vPos);
 
-	m_pDesc->CreateHitEffect(GetSystem(), Ctx);
+	m_pDesc->CreateHitEffect(GetSystem(), DamageCtx);
 
 	DEBUG_CATCH
 	}
@@ -504,6 +499,21 @@ CSpaceObject::Categories CMissile::GetCategory (void) const
 	return (m_pDesc->GetFireType() == ftBeam ? catBeam : catMissile);
 	}
 
+int CMissile::GetManeuverRate (void) const
+
+//	GetManeuverRate
+//
+//	Returns maneuver rate (degrees per tick).
+
+	{
+	int iRate = m_pDesc->GetManeuverRate();
+
+	if (m_pEnhancements && !m_fFragment)
+		iRate = Max(iRate, m_pEnhancements->GetManeuverRate());
+
+	return iRate;
+	}
+
 CString CMissile::GetNamePattern (DWORD dwNounPhraseFlags, DWORD *retdwFlags) const
 
 //	GetName
@@ -595,6 +605,28 @@ bool CMissile::IsAngryAt (CSpaceObject *pObj) const
 	return false;
 	}
 
+bool CMissile::IsTracking (void) const
+
+//	IsTracking
+//
+//	Returns TRUE if we are a tracking missile.
+
+	{
+	return (m_pDesc->IsTracking()
+			|| (!m_fFragment && m_pEnhancements && m_pEnhancements->IsTracking()));
+	}
+
+bool CMissile::IsTrackingTime (int iTick) const
+
+//	IsTrackingTime
+//
+//	Returns TRUE if we should track this tick.
+
+	{
+	return (m_pDesc->IsTrackingTime(iTick)
+			|| (!m_fFragment && m_pEnhancements && m_pEnhancements->IsTracking()));
+	}
+
 EDamageResults CMissile::OnDamage (SDamageCtx &Ctx)
 
 //	Damage
@@ -606,10 +638,9 @@ EDamageResults CMissile::OnDamage (SDamageCtx &Ctx)
 
 	Ctx.iSectHit = -1;
 
-	//	Compute damage
+	//	Short-circuit
 
 	bool bDestroy = false;
-	Ctx.iDamage = Ctx.Damage.RollDamage();
 	if (Ctx.iDamage == 0)
 		return damageNoDamage;
 
@@ -1013,6 +1044,7 @@ void CMissile::OnReadFromStream (SLoadCtx &Ctx)
 		m_fDetonate =		((dwLoad & 0x00000004) ? true : false);
 		m_fPassthrough =	((dwLoad & 0x00000008) ? true : false);
 		m_fPainterFade =	((dwLoad & 0x00000010) ? true : false);
+		m_fFragment =		((dwLoad & 0x00000020) ? true : false);
 
 		Ctx.pStream->Read((char *)&m_iSavedRotationsCount, sizeof(DWORD));
 		if (m_iSavedRotationsCount > 0)
@@ -1089,11 +1121,11 @@ void CMissile::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 		//	If we can choose new targets, see if we need one now
 
 		if (m_pDesc->CanAutoTarget() && m_pTarget == NULL)
-			m_pTarget = GetNearestEnemy(MAX_TARGET_RANGE, false);
+			m_pTarget = GetNearestVisibleEnemy(MAX_TARGET_RANGE);
 
 		//	If this is a tracking missile, change direction to face the target
 
-		if (m_pDesc->IsTrackingTime(iTick)
+		if (IsTrackingTime(iTick)
 				&& m_pTarget)
 			{
 			//	Get the position and velocity of the target
@@ -1127,12 +1159,12 @@ void CMissile::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 
 				if (iTurn >= 180)
 					{
-					int iTurnAngle = Min((360 - iTurn), m_pDesc->GetManeuverRate());
+					int iTurnAngle = Min((360 - iTurn), GetManeuverRate());
 					m_iRotation = (m_iRotation + 360 - iTurnAngle) % 360;
 					}
 				else
 					{
-					int iTurnAngle = Min(iTurn, m_pDesc->GetManeuverRate());
+					int iTurnAngle = Min(iTurn, GetManeuverRate());
 					m_iRotation = (m_iRotation + iTurnAngle) % 360;
 					}
 				}
@@ -1180,7 +1212,7 @@ void CMissile::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 		//	If we have a vapor trail and need to save rotation, do it
 
 		if (m_pDesc->GetVaporTrail().iVaporTrailLength 
-				&& m_pDesc->IsTracking())
+				&& IsTracking())
 			{
 			//	Compute the current rotation
 
@@ -1241,18 +1273,13 @@ void CMissile::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 
 			else if (m_iHitDir != -1)
 				{
-				SDamageCtx DamageCtx;
-				DamageCtx.pObj = m_pHit;
-				DamageCtx.pDesc = m_pDesc;
-				DamageCtx.Damage = m_pDesc->GetDamage();
-				DamageCtx.Damage.AddEnhancements(m_pEnhancements);
-				DamageCtx.Damage.SetCause(m_Source.GetCause());
-				if (IsAutomatedWeapon())
-					DamageCtx.Damage.SetAutomatedWeapon();
-				DamageCtx.iDirection = (m_iHitDir + 360 + mathRandom(0, 30) - 15) % 360;
-				DamageCtx.vHitPos = m_vHitPos;
-				DamageCtx.pCause = this;
-				DamageCtx.Attacker = m_Source;
+				SDamageCtx DamageCtx(m_pHit,
+						m_pDesc,
+						m_pEnhancements,
+						m_Source,
+						this,
+						AngleMod(m_iHitDir + mathRandom(0, 30) - 15),
+						m_vHitPos);
 
 				EDamageResults result = m_pHit->Damage(DamageCtx);
 
@@ -1377,6 +1404,7 @@ void CMissile::OnWriteToStream (IWriteStream *pStream)
 	dwSave |= (m_fDetonate ?	0x00000004 : 0);
 	dwSave |= (m_fPassthrough ? 0x00000008 : 0);
 	dwSave |= (m_fPainterFade ? 0x00000010 : 0);
+	dwSave |= (m_fFragment ?	0x00000020 : 0);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
 	//	Saved rotations
@@ -1403,7 +1431,7 @@ void CMissile::PaintLRSForeground (CG32bitImage &Dest, int x, int y, const Viewp
 				markerSmallRound);
 	}
 
-bool CMissile::PointInObject (const CVector &vObjPos, const CVector &vPointPos)
+bool CMissile::PointInObject (const CVector &vObjPos, const CVector &vPointPos) const
 
 //	PointInObject
 //

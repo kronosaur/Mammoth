@@ -15,6 +15,233 @@
 #define SECOND_PLURAL_ATTRIB				CONSTLIT("secondPlural")
 #define VOWEL_ARTICLE_ATTRIB				CONSTLIT("reverseArticle")
 
+CString CLanguage::Compose (const CString &sString, ICCItem *pArgs)
+
+//	Compose
+//
+//	Replaces the following variables:
+//
+//		%name%				player name
+//		%he%				he or she
+//		%his%				his or her (matching case)
+//		%hers%				his or hers (matching case)
+//		%him%				him or her (matching case)
+//		%sir%				sir or ma'am (matching case)
+//		%man%				man or woman (matching case)
+//		%brother%			brother or sister (matching case)
+//		%%					%
+
+	{
+	//	Prepare output
+
+	CString sOutput;
+	int iOutLeft = sString.GetLength() * 2;
+	char *pOut = sOutput.GetWritePointer(iOutLeft);
+
+	//	If pArgs is a structure, then we look up variable names in it.
+
+	bool bHasData = (pArgs && pArgs->IsSymbolTable());
+
+	//	Compose. Loop once for each segment that we need to add
+
+	bool bDone = false;
+	bool bVar = false;
+	char *pPos = sString.GetASCIIZPointer();
+	while (!bDone)
+		{
+		CString sVar;
+		char *pSeg;
+		char *pSegEnd;
+
+		if (bVar)
+			{
+			ICCItem *pValue;
+
+			int iArg;
+			ASSERT(*pPos == '%');
+
+			//	Skip %
+
+			pPos++;
+			char *pStart = pPos;
+			while (*pPos != '%' && *pPos != ':' && *pPos != '\0')
+				pPos++;
+
+			sVar = CString(pStart, pPos - pStart);
+
+			//	If we've got a colon, then we take the remainder as a parameter
+
+			CString sParam;
+			if (*pPos == ':')
+				{
+				pPos++;
+				char *pParamStart = pPos;
+				while (*pPos != '%' && *pPos != '\0')
+					pPos++;
+
+				sParam = CString(pParamStart, pPos - pParamStart);
+				}
+
+			//	Skip the closing %
+
+			if (*pPos == '%')
+				{
+				pPos++;
+				bVar = false;
+				}
+			else
+				bDone = true;
+
+			//	If the variable is capitalized, then we capitalize the result.
+
+			bool bCapitalize = (*sVar.GetASCIIZPointer() >= 'A' && *sVar.GetASCIIZPointer() <= 'Z');
+
+			//	Used if this is a gendered word.
+
+			const SStaticGenderWord *pGenderedWord = NULL;
+
+			//	Setup the segment depending on the variable
+
+			if (sVar.IsBlank())
+				sVar = CONSTLIT("%");
+
+			//	Check to see if this is a variable referencing gData.
+
+			else if (bHasData && (pValue = pArgs->GetElement(sVar)) && !pValue->IsNil())
+				sVar = pValue->GetStringValue();
+
+			//	Otherwise we look for standard variables
+
+			else if (strEquals(sVar, CONSTLIT("name")))
+				sVar = g_pUniverse->GetPlayerName();
+
+			//	Is this a gendered word?
+
+			else if (pGenderedWord = GENDER_WORD_TABLE.GetAt(sVar))
+				{
+				//	If we have a parameter then we expect it to be a variable in gData
+				//	with the gender.
+
+				if (!sParam.IsBlank())
+					{
+					if (bHasData 
+							&& (pValue = pArgs->GetElement(sParam)) 
+							&& !pValue->IsNil())
+						{
+						sVar = ComposeGenderedWord(sVar, ParseGenomeID(pValue->GetStringValue()));
+						}
+					else
+						sVar = strPatternSubst(CONSTLIT("%s not found"), sParam);
+					}
+
+				//	Otherwise, we use the player's gender
+
+				else
+					sVar = ComposeGenderedWord(sVar, g_pUniverse->GetPlayerGenome());
+				}
+
+			//	If we still haven't found it, then assume this is an index into 
+			//	and array of values.
+
+			else if (pArgs 
+					&& pArgs->IsList() 
+					&& !pArgs->IsSymbolTable()
+					&& (iArg = strToInt(sVar, 0)) != 0
+					&& Absolute(iArg) + 1 < pArgs->GetCount())
+				{
+				if (iArg < 0)
+					{
+					iArg = -iArg;
+					bCapitalize = true;
+					}
+
+				ICCItem *pArg = pArgs->GetElement(iArg + 1);
+				if (pArg)
+					sVar = pArg->GetStringValue();
+				}
+
+			//	If we could not find a valid var, then we assume a
+			//	single % sign.
+
+			else
+				{
+				sVar = CONSTLIT("%");
+				pPos = pStart;
+				bDone = (*pPos == '\0');
+				bVar = false;
+				bCapitalize = false;
+				}
+
+			//	Capitalize, if necessary
+
+			if (bCapitalize)
+				sVar = strCapitalize(sVar);
+
+			//	Setup segment
+
+			pSeg = sVar.GetASCIIZPointer();
+			pSegEnd = pSeg + sVar.GetLength();
+			}
+		else
+			{
+			//	Skip to the next variable or the end of the string
+
+			pSeg = pPos;
+			while (*pPos != '%' && *pPos != '\0')
+				pPos++;
+
+			if (*pPos == '\0')
+				bDone = true;
+			else
+				bVar = true;
+
+			pSegEnd = pPos;
+			}
+
+		//	Add the next segment
+
+		int iLen = pSegEnd - pSeg;
+		if (iLen > 0)
+			{
+			if (iLen > iOutLeft)
+				{
+				int iAlloc = sOutput.GetLength();
+				int iCurLen = iAlloc - iOutLeft;
+				int iNewAlloc = max(iAlloc * 2, iAlloc + iLen);
+				pOut = sOutput.GetWritePointer(iNewAlloc);
+				pOut += iCurLen;
+				iOutLeft = iNewAlloc - iCurLen;
+				}
+
+			while (pSeg < pSegEnd)
+				*pOut++ = *pSeg++;
+
+			iOutLeft -= iLen;
+			}
+		}
+
+	//	Done
+
+	int iAlloc = sOutput.GetLength();
+	int iCurLen = iAlloc - iOutLeft;
+	sOutput.Truncate(iCurLen);
+	return sOutput;
+	}
+
+CString CLanguage::ComposeGenderedWord (const CString &sWord, GenomeTypes iGender)
+
+//	ComposeGenderedWord
+//
+//	Returns the given gendered word.
+
+	{
+	const SStaticGenderWord *pEntry = GENDER_WORD_TABLE.GetAt(sWord);
+	if (pEntry == NULL || iGender < 0 || iGender >= genomeCount)
+		return sWord;
+
+	return pEntry->pszText[iGender];
+	}
+
 CString CLanguage::ComposeNounPhrase (const CString &sNoun, int iCount, const CString &sModifier, DWORD dwNounFlags, DWORD dwComposeFlags)
 
 //	ComposeNounPhrase
@@ -25,7 +252,7 @@ CString CLanguage::ComposeNounPhrase (const CString &sNoun, int iCount, const CS
 	//	Figure out whether we need to pluralize or not
 
 	bool bPluralize = (dwComposeFlags & nounPlural)
-			|| (iCount > 1 
+			|| (iCount != 1 
 				&& ((dwComposeFlags & nounCount) 
 					|| (dwComposeFlags & nounCountOnly) 
 					|| (dwComposeFlags & nounDemonstrative) 
@@ -40,8 +267,13 @@ CString CLanguage::ComposeNounPhrase (const CString &sNoun, int iCount, const CS
 
 	//	If we need to strip quotes, do it now
 
-	if ((dwComposeFlags & nounNoQuotes) && NounDesc.bHasQuotes)
-		sNounForm = strProcess(sNounForm, STRPROC_NO_DOUBLE_QUOTES);
+	if (NounDesc.bHasQuotes)
+		{
+		if (dwComposeFlags & nounNoQuotes)
+			sNounForm = strProcess(sNounForm, STRPROC_NO_DOUBLE_QUOTES);
+		else if (dwComposeFlags & nounEscapeQuotes)
+			sNounForm = strProcess(sNounForm, STRPROC_ESCAPE_DOUBLE_QUOTES);
+		}
 
 	//	Get the appropriate article
 
@@ -121,6 +353,17 @@ CString CLanguage::ComposeNumber (ENumberFormatTypes iFormat, Metric rNumber)
 	{
 	switch (iFormat)
 		{
+		//	Automagically come up with precission
+
+		case numberReal:
+			if (rNumber >= 100.0)
+				return strFromInt((int)mathRound(rNumber));
+			else if (rNumber >= 1.0)
+				return strFromDouble(rNumber, 1);
+			else
+				return strFromDouble(rNumber, 2);
+			break;
+
 		//	For power, we assume the value in in KWs.
 
 		case numberPower:
@@ -188,6 +431,23 @@ CString CLanguage::ComposeVerb (const CString &sVerb, DWORD dwVerbFlags)
 		return CString(pVerbData->pszPlural, -1, TRUE);
 
 	return sVerb;
+	}
+
+bool CLanguage::FindGenderedWord (const CString &sWord, GenomeTypes iGender, CString *retsResult)
+
+//	FindGenderedWord
+//
+//	Returns TRUE if the given word is a gendered word.
+
+	{
+	const SStaticGenderWord *pEntry = GENDER_WORD_TABLE.GetAt(sWord);
+	if (pEntry == NULL || iGender < 0 || iGender >= genomeCount)
+		return false;
+
+	if (retsResult)
+		*retsResult = pEntry->pszText[iGender];
+
+	return true;
 	}
 
 DWORD CLanguage::LoadNameFlags (CXMLElement *pDesc)
@@ -287,6 +547,195 @@ void CLanguage::ParseItemName (const CString &sName, CString *retsRoot, CString 
 
 	if (retsRoot)
 		*retsRoot = CString(pStart, (int)(pPosEnd - pStart));
+	}
+
+void CLanguage::ParseLabelDesc (const CString &sLabelDesc, CString *retsLabel, CString *retsKey, int *retiKey, TArray<ELabelAttribs> *retSpecial)
+
+//	ParseLabelDesc
+//
+//	Parses a label descriptor of the following forms:
+//
+//	Action:				This is a normal label
+//	[PageDown] Action:	This is a multi-key accelerator
+//	[A]ction:			A is the special key
+//	[Enter]:			Treated as a normal label because key is > 1 character
+//	*Action:			This is the default action
+//	^Action:			This is the cancel action
+//	>Action:			This is the next key
+//	<Action:			This is the prev key
+
+	{
+	char *pPos = sLabelDesc.GetASCIIZPointer();
+
+	//	Parse any special attribute prefixes
+
+	while (*pPos == '*' || *pPos == '^' || *pPos == '>' || *pPos == '<')
+		{
+		if (retSpecial)
+			{
+			switch (*pPos)
+				{
+				case '*':
+					retSpecial->Insert(specialDefault);
+					break;
+
+				case '^':
+					retSpecial->Insert(specialCancel);
+					break;
+
+				case '>':
+					retSpecial->Insert(specialNextKey);
+					break;
+
+				case '<':
+					retSpecial->Insert(specialPrevKey);
+					break;
+				}
+			}
+
+		pPos++;
+		}
+
+	//	Parse out the label and any accelerator key
+
+	CString sLabel;
+	CString sKey;
+	int iKey = -1;
+
+	//	See if we have a multi-key accelerator label
+
+	char *pStart = NULL;
+	char *pAccelStart = NULL;
+	char *pAccelEnd = NULL;
+	if (*pPos == '[')
+		{
+		pStart = pPos;
+		while (*pStart != '\0' && *pStart != ']')
+			pStart++;
+
+		if (*pStart == ']' && pStart[1] != '\0')
+			{
+			pAccelEnd = pStart;
+
+			pStart++;
+			while (*pStart == ' ')
+				pStart++;
+
+			//	Must be more than 1 character long
+
+			pAccelStart = pPos + 1;
+			if ((int)(pAccelEnd - pAccelStart) <= 1)
+				pStart = NULL;
+			}
+		else
+			pStart = NULL;
+		}
+
+	//	If we found a multi-key accelerator label, use that
+
+	if (pStart)
+		{
+		sLabel = CString(pStart);
+
+		//	Look up this key by name
+
+		CString sKeyName = CString(pAccelStart, (int)(pAccelEnd - pAccelStart));
+		DWORD dwKey = CVirtualKeyData::GetKey(sKeyName);
+		
+		//	If this is a valid key, then we use it as an accelerator 
+		//	and special key.
+
+		if (dwKey != CVirtualKeyData::INVALID_VIRT_KEY)
+			{
+			sKey = CVirtualKeyData::GetKeyLabel(dwKey);
+
+			//	We only support a limited number of keys
+
+			switch (dwKey)
+				{
+				case VK_DOWN:
+				case VK_RIGHT:
+					retSpecial->Insert(specialNextKey);
+					break;
+
+				case VK_ESCAPE:
+					retSpecial->Insert(specialCancel);
+					break;
+
+				case VK_LEFT:
+				case VK_UP:
+					retSpecial->Insert(specialPrevKey);
+					break;
+
+				case VK_NEXT:
+					retSpecial->Insert(specialPgDnKey);
+					break;
+
+				case VK_PRIOR:
+					retSpecial->Insert(specialPgUpKey);
+					break;
+
+				case VK_RETURN:
+					retSpecial->Insert(specialDefault);
+					break;
+				}
+			}
+
+		//	Otherwise, just an accelerator
+
+		else
+			sKey = sKeyName;
+		}
+
+	//	Otherwise, parse for an embedded label using the bracket syntax.
+
+	else
+		{
+		pStart = pPos;
+
+		while (*pPos != '\0')
+			{
+			if (pPos[0] == '[' && pPos[1] != '\0' && pPos[2] == ']')
+				{
+				if (pStart)
+					sLabel.Append(CString(pStart, (int)(pPos - pStart)));
+
+				pPos++;
+				if (*pPos == '\0')
+					break;
+
+				if (*pPos != ']')
+					{
+					iKey = sLabel.GetLength();
+					sKey = CString(pPos, 1);
+					sLabel.Append(sKey);
+					pPos++;
+					}
+
+				if (*pPos == ']')
+					pPos++;
+
+				pStart = pPos;
+				continue;
+				}
+			else
+				pPos++;
+			}
+
+		if (pStart != pPos)
+			sLabel.Append(CString(pStart, (int)(pPos - pStart)));
+		}
+
+	//	Done
+
+	if (retsLabel)
+		*retsLabel = sLabel;
+
+	if (retsKey)
+		*retsKey = sKey;
+
+	if (retiKey)
+		*retiKey = iKey;
 	}
 
 DWORD CLanguage::ParseNounFlags (const CString &sValue)

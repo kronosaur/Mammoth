@@ -33,11 +33,22 @@
 #define X_ATTRIB								CONSTLIT("x")
 #define Y_ATTRIB								CONSTLIT("y")
 
+#define FIELD_KNOWN_ONLY						CONSTLIT("knownOnly")
+#define FIELD_MAX_DIST							CONSTLIT("maxDist")
+#define FIELD_MIN_DIST							CONSTLIT("minDist")
+
 #define PREV_DEST								CONSTLIT("[Prev]")
 
+#define PROPERTY_DEST_GATE_ID					CONSTLIT("destGateID")
+#define PROPERTY_DEST_ID						CONSTLIT("destID")
+#define PROPERTY_GATE_ID						CONSTLIT("gateID")
+#define PROPERTY_LAST_VISITED_GAME_SECONDS		CONSTLIT("lastVisitSeconds")
+#define PROPERTY_LAST_VISITED_ON				CONSTLIT("lastVisitOn")
 #define PROPERTY_LEVEL							CONSTLIT("level")
 #define PROPERTY_NAME							CONSTLIT("name")
+#define PROPERTY_NODE_ID						CONSTLIT("nodeID")
 #define PROPERTY_POS							CONSTLIT("pos")
+#define PROPERTY_UNCHARTED						CONSTLIT("uncharted")
 
 #define SPECIAL_LEVEL							CONSTLIT("level:")
 #define SPECIAL_NODE_ID							CONSTLIT("nodeID:")
@@ -45,14 +56,10 @@
 
 //	CTopologyNode class --------------------------------------------------------
 
-CTopologyNode::CTopologyNode (const CString &sID, DWORD SystemUNID, CSystemMap *pMap) : m_sID(sID),
+CTopologyNode::CTopologyNode (const CString &sID, DWORD SystemUNID, CSystemMap *pMap) : 
+		m_sID(sID),
 		m_SystemUNID(SystemUNID),
-		m_iLevel(0),
-		m_pMap(pMap),
-		m_pSystem(NULL),
-		m_dwID(0xffffffff),
-		m_bKnown(false),
-		m_bPosKnown(false)
+		m_pMap(pMap)
 
 //	CTopology constructor
 
@@ -79,35 +86,7 @@ void CTopologyNode::AddAttributes (const CString &sAttribs)
 	m_sAttributes = ::AppendModifiers(m_sAttributes, sAttribs);
 	}
 
-#if 0
-ALERROR CTopologyNode::AddGateInt (const CString &sName, const CString &sDestNode, const CString &sEntryPoint)
-
-//	AddGateInt
-//
-//	Adds a gate to the topology
-
-	{
-	//	Add the gate
-
-	bool bNew;
-	StarGateDesc *pDesc = m_NamedGates.SetAt(sName, &bNew);
-
-	//	If not new, then this is an error
-
-	if (!bNew)
-		return ERR_FAIL;
-
-	//	Initialize
-
-	pDesc->sDestNode = sDestNode;
-	pDesc->sDestEntryPoint = sEntryPoint;
-	pDesc->pDestNode = NULL;
-
-	return NOERROR;
-	}
-#endif
-
-ALERROR CTopologyNode::AddStargate (const CString &sName, const CString &sDestNode, const CString &sDestEntryPoint, const TArray<SPoint> *pMidPoints)
+ALERROR CTopologyNode::AddStargate (const SStargateDesc &GateDesc)
 
 //	AddStargate
 //
@@ -117,7 +96,7 @@ ALERROR CTopologyNode::AddStargate (const CString &sName, const CString &sDestNo
 	//	Add the gate
 
 	bool bNew;
-	StarGateDesc *pDesc = m_NamedGates.SetAt(sName, &bNew);
+	SStargateEntry *pDesc = m_NamedGates.SetAt(GateDesc.sName, &bNew);
 
 	//	If not new, then this is an error
 
@@ -126,16 +105,18 @@ ALERROR CTopologyNode::AddStargate (const CString &sName, const CString &sDestNo
 
 	//	Initialize
 
-	pDesc->sDestNode = sDestNode;
-	pDesc->sDestEntryPoint = sDestEntryPoint;
+	pDesc->sDestNode = GateDesc.sDestNode;
+	pDesc->sDestEntryPoint = GateDesc.sDestName;
 
-	if (pMidPoints)
-		pDesc->MidPoints = *pMidPoints;
+	if (GateDesc.pMidPoints)
+		pDesc->MidPoints = *GateDesc.pMidPoints;
+
+	pDesc->fUncharted = GateDesc.bUncharted;
 
 	return NOERROR;
 	}
 
-ALERROR CTopologyNode::AddStargateAndReturn (const CString &sGateID, const CString &sDestNodeID, const CString &sDestGateID)
+ALERROR CTopologyNode::AddStargateAndReturn (const SStargateDesc &GateDesc)
 
 //	AddStargate
 //
@@ -144,10 +125,10 @@ ALERROR CTopologyNode::AddStargateAndReturn (const CString &sGateID, const CStri
 	{
 	//	Get the destination node
 
-	CTopologyNode *pDestNode = g_pUniverse->FindTopologyNode(sDestNodeID);
+	CTopologyNode *pDestNode = g_pUniverse->FindTopologyNode(GateDesc.sDestNode);
 	if (pDestNode == NULL)
 		{
-		kernelDebugLogPattern("Unable to find destination node: %s", sDestNodeID);
+		kernelDebugLogPattern("Unable to find destination node: %s", GateDesc.sDestNode);
 		return ERR_FAIL;
 		}
 
@@ -155,20 +136,34 @@ ALERROR CTopologyNode::AddStargateAndReturn (const CString &sGateID, const CStri
 
 	CString sReturnNodeID;
 	CString sReturnEntryPoint;
-	if (!pDestNode->FindStargate(sDestGateID, &sReturnNodeID, &sReturnEntryPoint))
+	if (!pDestNode->FindStargate(GateDesc.sDestName, &sReturnNodeID, &sReturnEntryPoint))
 		{
-		kernelDebugLogPattern("Unable to find destination stargate: %s", sDestGateID);
-		return ERR_FAIL;
+		//	If we can't find the stargate in the destination node, then we 
+		//	create it if we can.
+
+		SStargateDesc ReturnGateDesc;
+		ReturnGateDesc.sName = GateDesc.sDestName;
+		ReturnGateDesc.sDestNode = GetID();
+		ReturnGateDesc.sDestName = GateDesc.sName;
+
+		if (pDestNode->AddStargate(ReturnGateDesc) != NOERROR)
+			{
+			::kernelDebugLogPattern("Unable to find or add destination stargate: %s", GateDesc.sDestName);
+			return ERR_FAIL;
+			}
+
+		sReturnNodeID = GetID();
+		sReturnEntryPoint = GateDesc.sName;
 		}
 
 	//	Add the gate
 
-	AddStargate(sGateID, sDestNodeID, sDestGateID);
+	AddStargate(GateDesc);
 
 	//	See if we need to fix up the return gate
 
 	if (strEquals(sReturnNodeID, PREV_DEST))
-		pDestNode->SetStargateDest(sDestGateID, GetID(), sGateID);
+		pDestNode->SetStargateDest(GateDesc.sDestName, GetID(), GateDesc.sName);
 
 	return NOERROR;
 	}
@@ -281,7 +276,7 @@ void CTopologyNode::CreateFromStream (SUniverseLoadCtx &Ctx, CTopologyNode **ret
 		{
 		CString sName;
 		sName.ReadFromStream(Ctx.pStream);
-		StarGateDesc *pDesc = pNode->m_NamedGates.SetAt(sName);
+		SStargateEntry *pDesc = pNode->m_NamedGates.SetAt(sName);
 
 		pDesc->sDestNode.ReadFromStream(Ctx.pStream);
 		pDesc->sDestEntryPoint.ReadFromStream(Ctx.pStream);
@@ -290,7 +285,8 @@ void CTopologyNode::CreateFromStream (SUniverseLoadCtx &Ctx, CTopologyNode **ret
 			{
 			DWORD dwFlags;
 			Ctx.pStream->Read((char *)&dwFlags, sizeof(DWORD));
-			bool bCurved = ((dwFlags & 0x00000001) ? true : false);
+			bool bCurved =		((dwFlags & 0x00000001) ? true : false);
+			pDesc->fUncharted = ((dwFlags & 0x00000002) ? true : false);
 
 			if (bCurved)
 				{
@@ -323,6 +319,7 @@ void CTopologyNode::CreateFromStream (SUniverseLoadCtx &Ctx, CTopologyNode **ret
 
 	pNode->m_bKnown =		(dwLoad & 0x00000001 ? true : false);
 	pNode->m_bPosKnown =	(dwLoad & 0x00000002 ? true : false);
+	pNode->m_bDeferCreate =	(dwLoad & 0x00000004 ? true : false);
 	pNode->m_bMarked = false;
 
 	//	More
@@ -358,7 +355,7 @@ bool CTopologyNode::FindStargate (const CString &sName, CString *retsDestNode, C
 //	Looks for the stargate by name and returns the destination node id and entry point
 
 	{
-	StarGateDesc *pDesc = m_NamedGates.GetAt(sName);
+	SStargateEntry *pDesc = m_NamedGates.GetAt(sName);
 	if (pDesc == NULL)
 		return false;
 
@@ -382,7 +379,7 @@ CString CTopologyNode::FindStargateName (const CString &sDestNode, const CString
 
 	for (i = 0; i < m_NamedGates.GetCount(); i++)
 		{
-		StarGateDesc *pDesc = &m_NamedGates[i];
+		SStargateEntry *pDesc = &m_NamedGates[i];
 		if (strEquals(pDesc->sDestNode, sDestNode)
 				&& strEquals(pDesc->sDestEntryPoint, sEntryPoint))
 			return m_NamedGates.GetKey(i);
@@ -403,7 +400,7 @@ bool CTopologyNode::FindStargateTo (const CString &sDestNode, CString *retsName,
 
 	for (i = 0; i < m_NamedGates.GetCount(); i++)
 		{
-		StarGateDesc *pDesc = &m_NamedGates[i];
+		SStargateEntry *pDesc = &m_NamedGates[i];
 		if (strEquals(pDesc->sDestNode, sDestNode))
 			{
 			if (retsName)
@@ -448,7 +445,7 @@ CTopologyNode *CTopologyNode::GetGateDest (const CString &sName, CString *retsEn
 //	Get stargate destination
 
 	{
-	StarGateDesc *pDesc = m_NamedGates.GetAt(sName);
+	SStargateEntry *pDesc = m_NamedGates.GetAt(sName);
 	if (pDesc == NULL)
 		return NULL;
 
@@ -518,7 +515,24 @@ ICCItem *CTopologyNode::GetProperty (const CString &sName)
 	{
 	CCodeChain &CC = g_pUniverse->GetCC();
 
-	if (strEquals(sName, PROPERTY_LEVEL))
+	if (strEquals(sName, PROPERTY_LAST_VISITED_GAME_SECONDS))
+		{
+		DWORD dwLastVisited = GetLastVisitedTime();
+		if (dwLastVisited == 0xffffffff)
+			return CC.CreateNil();
+
+		CTimeSpan Span = g_pUniverse->GetElapsedGameTimeAt(g_pUniverse->GetTicks()) - g_pUniverse->GetElapsedGameTimeAt(GetLastVisitedTime());
+		return CC.CreateInteger(Span.Seconds());
+		}
+	else if (strEquals(sName, PROPERTY_LAST_VISITED_ON))
+		{
+		DWORD dwLastVisited = GetLastVisitedTime();
+		if (dwLastVisited == 0xffffffff)
+			return CC.CreateNil();
+		else
+			return CC.CreateInteger(dwLastVisited);
+		}
+	else if (strEquals(sName, PROPERTY_LEVEL))
 		return CC.CreateInteger(GetLevel());
 	else if (strEquals(sName, PROPERTY_NAME))
 		return CC.CreateString(GetSystemName());
@@ -563,7 +577,7 @@ CTopologyNode *CTopologyNode::GetStargateDest (int iIndex, CString *retsEntryPoi
 //	Returns the destination node for the given stargate
 
 	{
-	StarGateDesc *pDesc = &m_NamedGates[iIndex];
+	SStargateEntry *pDesc = &m_NamedGates[iIndex];
 	if (retsEntryPoint)
 		*retsEntryPoint = pDesc->sDestEntryPoint;
 
@@ -573,6 +587,38 @@ CTopologyNode *CTopologyNode::GetStargateDest (int iIndex, CString *retsEntryPoi
 	return pDesc->pDestNode;
 	}
 
+ICCItemPtr CTopologyNode::GetStargateProperty (const CString &sName, const CString &sProperty) const
+
+//	GetStargateProperty
+//
+//	Returns a property of the given stargate.
+
+	{
+	CCodeChain &CC = g_pUniverse->GetCC();
+
+	SStargateEntry *pDesc = m_NamedGates.GetAt(sName);
+	if (pDesc == NULL)
+		return ICCItemPtr(CC.CreateNil());
+
+	if (strEquals(sProperty, PROPERTY_DEST_GATE_ID))
+		return ICCItemPtr(CC.CreateString(pDesc->sDestEntryPoint));
+
+	else if (strEquals(sProperty, PROPERTY_DEST_ID))
+		return ICCItemPtr(CC.CreateString(pDesc->sDestNode));
+
+	else if (strEquals(sProperty, PROPERTY_GATE_ID))
+		return ICCItemPtr(CC.CreateString(sName));
+
+	else if (strEquals(sProperty, PROPERTY_NODE_ID))
+		return ICCItemPtr(CC.CreateString(GetID()));
+
+	else if (strEquals(sProperty, PROPERTY_UNCHARTED))
+		return ICCItemPtr(CC.CreateBool(pDesc->fUncharted));
+
+	else
+		return ICCItemPtr(CC.CreateNil());
+	}
+
 void CTopologyNode::GetStargateRouteDesc (int iIndex, SStargateRouteDesc *retRouteDesc)
 
 //	GetStargateRouteDesc
@@ -580,7 +626,7 @@ void CTopologyNode::GetStargateRouteDesc (int iIndex, SStargateRouteDesc *retRou
 //	Returns route description
 
 	{
-	StarGateDesc *pDesc = &m_NamedGates[iIndex];
+	SStargateEntry *pDesc = &m_NamedGates[iIndex];
 
 	retRouteDesc->pFromNode = this;
 	retRouteDesc->sFromName = m_NamedGates.GetKey(iIndex);
@@ -591,6 +637,8 @@ void CTopologyNode::GetStargateRouteDesc (int iIndex, SStargateRouteDesc *retRou
 	retRouteDesc->pToNode = pDesc->pDestNode;
 	retRouteDesc->sToName = pDesc->sDestEntryPoint;
 	retRouteDesc->MidPoints = pDesc->MidPoints;
+
+	retRouteDesc->bUncharted = pDesc->fUncharted;
 	}
 
 bool CTopologyNode::HasSpecialAttribute (const CString &sAttrib) const
@@ -633,6 +681,39 @@ bool CTopologyNode::HasVariantLabel (const CString &sVariant)
 		}
 
 	return false;
+	}
+
+void CTopologyNode::InitCriteriaCtx (SCriteriaCtx &Ctx, const SCriteria &Criteria)
+
+//	InitCriteriaCtx
+//
+//	Initializes criteria context. This is needed to optimize distance 
+//	calculations.
+
+	{
+	int i;
+
+	Ctx.pTopology = &g_pUniverse->GetTopology();
+
+	//	Initialize the distance cache, if necessary.
+
+	for (i = 0; i < Criteria.DistanceTo.GetCount(); i++)
+		{
+		//	If we're restricting nodes to a distance from a particular node, 
+		//	then we pre-calculate distances.
+	
+		if (!Criteria.DistanceTo[i].sNodeID.IsBlank())
+			{
+			CTopologyNode *pSource = Ctx.pTopology->FindTopologyNode(Criteria.DistanceTo[i].sNodeID);
+			if (pSource == NULL)
+				continue;
+
+			bool bNew;
+			TSortMap<CString, int> *pDistMap = Ctx.DistanceCache.SetAt(pSource->GetID(), &bNew);
+			if (bNew)
+				Ctx.pTopology->CalcDistances(pSource, *pDistMap);
+			}
+		}
 	}
 
 ALERROR CTopologyNode::InitFromAdditionalXML (CTopology &Topology, CXMLElement *pDesc, CString *retsError)
@@ -776,6 +857,11 @@ bool CTopologyNode::MatchesCriteria (SCriteriaCtx &Ctx, const SCriteria &Crit)
 	if (Crit.iMaxStargates != -1 && m_NamedGates.GetCount() > Crit.iMaxStargates)
 		return false;
 
+	//	Flags
+
+	if (Crit.bKnownOnly && !IsKnown())
+		return false;
+
 	//	Distance to other nodes
 
 	if (Ctx.pTopology)
@@ -800,7 +886,16 @@ bool CTopologyNode::MatchesCriteria (SCriteriaCtx &Ctx, const SCriteria &Crit)
 
 			else
 				{
-				int iDist = Ctx.pTopology->GetDistance(GetID(), Crit.DistanceTo[i].sNodeID);
+				int iDist;
+
+				//	See if we can use the cache to get the distance. If not, then
+				//	we just compute it.
+
+				const TSortMap<CString, int> *pDistMap = Ctx.DistanceCache.GetAt(Crit.DistanceTo[i].sNodeID);
+				if (pDistMap == NULL || !pDistMap->Find(GetID(), &iDist))
+					iDist = Ctx.pTopology->GetDistance(Crit.DistanceTo[i].sNodeID, GetID());
+
+				//	In range?
 
 				if (iDist != -1 && iDist < Crit.DistanceTo[i].iMinDist)
 					return false;
@@ -942,6 +1037,97 @@ ALERROR CTopologyNode::ParseCriteria (CXMLElement *pCrit, SCriteria *retCrit, CS
 		}
 
 	return NOERROR;
+	}
+
+ALERROR CTopologyNode::ParseCriteria (ICCItem *pItem, SCriteria &retCrit, CString *retsError)
+
+//	ParseCriteria
+//
+//	Parses a TLisp criteria structure.
+
+	{
+	int i;
+
+	//	Initialize
+
+	retCrit = SCriteria();
+
+	//	Parse
+
+	if (!pItem || pItem->IsNil())
+		return NOERROR;
+
+	else if (!pItem->IsSymbolTable())
+		{
+		if (retsError) *retsError = CONSTLIT("Criteria must be a structure.");
+		return ERR_FAIL;
+		}
+
+	else
+		{
+		int iMaxDist = -1;
+		int iMinDist = 0;
+
+		for (i = 0; i < pItem->GetCount(); i++)
+			{
+			CString sKey = pItem->GetKey(i);
+			if (strEquals(sKey, FIELD_MAX_DIST))
+				{
+				iMaxDist = pItem->GetElement(i)->GetIntegerValue();
+				}
+			else if (strEquals(sKey, FIELD_MIN_DIST))
+				{
+				iMinDist = pItem->GetElement(i)->GetIntegerValue();
+				}
+			else if (strEquals(sKey, FIELD_KNOWN_ONLY))
+				{
+				retCrit.bKnownOnly = true;
+				}
+			else
+				{
+				if (retsError) *retsError = strPatternSubst(CONSTLIT("Unknown criteria field: %s"), sKey);
+				return ERR_FAIL;
+				}
+			}
+
+		//	Set min/max
+
+		if (iMaxDist != -1 || iMinDist != 0)
+			{
+			if ((iMaxDist != -1 && iMaxDist < iMinDist)
+					|| iMinDist < 0)
+				{
+				if (retsError) *retsError = strPatternSubst(CONSTLIT("Invalid criteria distance."));
+				return ERR_FAIL;
+				}
+
+			//	This short-cut only works if we're not using the full-length,
+			//	explicit distanceTo criteria (not yet implemented).
+
+			else if (retCrit.DistanceTo.GetCount() != 0)
+				{
+				if (retsError) *retsError = strPatternSubst(CONSTLIT("maxDist and minDist incompatible with distanceTo."));
+				return ERR_FAIL;
+				}
+
+			//	Make sure we have a valid node
+
+			else if (g_pUniverse->GetCurrentTopologyNode() == NULL)
+				{
+				if (retsError) *retsError = strPatternSubst(CONSTLIT("No current system."));
+				return ERR_FAIL;
+				}
+
+			//	Create a new entry
+
+			SDistanceTo *pDistCriteria = retCrit.DistanceTo.Insert();
+			pDistCriteria->sNodeID = g_pUniverse->GetCurrentTopologyNode()->GetID();
+			pDistCriteria->iMaxDist = iMaxDist;
+			pDistCriteria->iMinDist = iMinDist;
+			}
+
+		return NOERROR;
+		}
 	}
 
 ALERROR CTopologyNode::ParsePointList (const CString &sValue, TArray<SPoint> *retPoints)
@@ -1104,6 +1290,24 @@ bool CTopologyNode::SetProperty (const CString &sName, ICCItem *pValue, CString 
 		return false;
 	}
 
+void CTopologyNode::SetStargateCharted (const CString &sName, bool bCharted)
+
+//	SetStargateCharted
+//
+//	Sets whether or not the given stargate is charted.
+
+	{
+	SStargateEntry *pDesc = m_NamedGates.GetAt(sName);
+	if (pDesc == NULL)
+		{
+		if (g_pUniverse->InDebugMode())
+			::kernelDebugLogPattern("SetStargateCharted: Node %s does not have stargate named %s", GetID(), sName);
+		return;
+		}
+
+	pDesc->fUncharted = !bCharted;
+	}
+
 void CTopologyNode::SetStargateDest (const CString &sName, const CString &sDestNode, const CString &sEntryPoint)
 
 //	SetStargateDest
@@ -1111,10 +1315,11 @@ void CTopologyNode::SetStargateDest (const CString &sName, const CString &sDestN
 //	Sets the destination information for the given stargate
 
 	{
-	StarGateDesc *pDesc = m_NamedGates.GetAt(sName);
+	SStargateEntry *pDesc = m_NamedGates.GetAt(sName);
 	if (pDesc == NULL)
 		{
-		ASSERT(false);
+		if (g_pUniverse->InDebugMode())
+			::kernelDebugLogPattern("SetStargateDest: Node %s does not have stargate named %s", GetID(), sName);
 		return;
 		}
 
@@ -1178,14 +1383,15 @@ void CTopologyNode::WriteToStream (IWriteStream *pStream)
 	pStream->Write((char *)&dwCount, sizeof(DWORD));
 	for (i = 0; i < (int)dwCount; i++)
 		{
-		StarGateDesc *pDesc = &m_NamedGates[i];
+		SStargateEntry *pDesc = &m_NamedGates[i];
 		CString sName = m_NamedGates.GetKey(i);
 		sName.WriteToStream(pStream);
 		pDesc->sDestNode.WriteToStream(pStream);
 		pDesc->sDestEntryPoint.WriteToStream(pStream);
 
 		DWORD dwFlags = 0;
-		dwFlags |= (pDesc->MidPoints.GetCount() > 0 ? 0x00000001 : 0);
+		dwFlags |= (pDesc->MidPoints.GetCount() > 0 ?	0x00000001 : 0);
+		dwFlags |= (pDesc->fUncharted ?					0x00000002 : 0);
 		pStream->Write((char *)&dwFlags, sizeof(DWORD));
 
 		if (pDesc->MidPoints.GetCount() > 0)
@@ -1210,6 +1416,7 @@ void CTopologyNode::WriteToStream (IWriteStream *pStream)
 	dwSave = 0;
 	dwSave |= (m_bKnown ?		0x00000001 : 0);
 	dwSave |= (m_bPosKnown ?	0x00000002 : 0);
+	dwSave |= (m_bDeferCreate ?	0x00000004 : 0);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
 	//	Write end game data

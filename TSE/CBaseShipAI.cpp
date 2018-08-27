@@ -54,7 +54,8 @@ CBaseShipAI::CBaseShipAI (void) :
 		m_fCheckedForWalls(false),
 		m_fAvoidWalls(false),
 		m_fIsPlayerWingman(false),
-		m_fOldStyleBehaviors(false)
+		m_fOldStyleBehaviors(false),
+		m_fPlayerBlacklisted(false)
 
 //	CBaseShipAI constructor
 
@@ -160,6 +161,7 @@ void CBaseShipAI::Behavior (SUpdateCtx &Ctx)
 		if (m_pCommandCode)
 			{
 			CCodeChainCtx Ctx;
+			Ctx.DefineContainingType(m_pShip);
 			Ctx.SaveAndDefineSourceVar(m_pShip);
 
 			ICCItem *pResult = Ctx.RunLambda(m_pCommandCode);
@@ -421,6 +423,43 @@ bool CBaseShipAI::CancelOrder (int iIndex)
 		}
 	else
 		return false;
+	}
+
+bool CBaseShipAI::CanObjRequestDock (void) const
+
+//	CanObjRequestDock
+//
+//	Returns TRUE if another object can request to dock with us (assuming we have
+//	docking ports, etc.).
+
+	{
+	switch (GetCurrentOrder())
+		{
+		//	Certain orders keep us immobile, so we can allow others to dock with
+		//	us.
+
+		case orderDestroyTargetHold:
+		case orderGateOnThreat:
+		case orderGateOnStationDestroyed:
+		case orderHold:
+		case orderHoldAndAttack:
+		case orderHoldCourse:
+		case orderSentry:
+		case orderWait:
+		case orderWaitForEnemy:
+		case orderWaitForPlayer:
+		case orderWaitForTarget:
+		case orderWaitForThreat:
+		case orderWaitForUndock:
+			return true;
+
+		//	Otherwise, if we're immobile, then it doesn't matter what our orders.
+		//	But if we're mobile, then we're maneuvering, so we can't allow 
+		//	docking.
+
+		default:
+			return IsImmobile();
+		}
 	}
 
 bool CBaseShipAI::CheckForEnemiesInRange (CSpaceObject *pCenter, Metric rRange, int iInterval, CSpaceObject **retpTarget)
@@ -738,6 +777,15 @@ void CBaseShipAI::GetWeaponTarget (STargetingCtx &TargetingCtx, CItemCtx &ItemCt
 		if (pTarget)
 			TargetingCtx.Targets.Insert(pTarget);
 
+		//	If the player is blacklisted, add her to the list.
+
+		if (m_fPlayerBlacklisted)
+			{
+			pTarget = m_pShip->GetPlayerShip();
+			if (pTarget)
+				TargetingCtx.Targets.Insert(pTarget);
+			}
+
 		TargetingCtx.bRecalcTargets = false;
 		}
 
@@ -865,8 +913,17 @@ bool CBaseShipAI::IsAngryAt (CSpaceObject *pObj) const
 //	Returns TRUE if we're angry at the given object
 
 	{
+	//	If we're attacking the object, then we're angry at it.
+
 	if (GetTarget(CItemCtx()) == pObj)
 		return true;
+
+	//	Are we angry at the player?
+
+	if (m_fPlayerBlacklisted && pObj->IsPlayer())
+		return true;
+
+	//	If our base is angry at the object, then we're angry too
 
 	switch (GetCurrentOrder())
 		{
@@ -947,6 +1004,8 @@ void CBaseShipAI::OnAttacked (CSpaceObject *pAttacker, const SDamageCtx &Damage)
 			//	at the root problem (the player instead of her autons)
 			//
 			//	Also, we ignore damage from automated weapons
+			//	[LATER: If we could pass CDamageSource instead of pAttacker, we could
+			//	use the source to figure out if this is an automated weapon.]
 
 			if (!Damage.Damage.IsAutomatedWeapon())
 				HandleFriendlyFire(pAttacker, pOrderGiver);
@@ -1470,7 +1529,7 @@ void CBaseShipAI::ReadFromStream (SLoadCtx &Ctx, CShip *pShip)
 
 	Ctx.pStream->Read((char *)&dwLoad, sizeof(DWORD));
 	m_fDeviceActivate =			((dwLoad & 0x00000001) ? true : false);
-	//	0x00000002 unused at 75
+	m_fPlayerBlacklisted =		((dwLoad & 0x00000002) && (Ctx.dwVersion >= 75) ? true : false);
 	//	0x00000004 unused at 75
 	m_fCheckedForWalls =		((dwLoad & 0x00000008) ? true : false);
 	m_fAvoidWalls =				((dwLoad & 0x00000010) ? true : false);
@@ -1858,7 +1917,7 @@ void CBaseShipAI::WriteToStream (IWriteStream *pStream)
 
 	dwSave = 0;
 	dwSave |= (m_fDeviceActivate ?			0x00000001 : 0);
-	//	0x00000002 unused at version 75.
+	dwSave |= (m_fPlayerBlacklisted ?		0x00000002 : 0);
 	//	0x00000004 unused at version 75.
 	dwSave |= (m_fCheckedForWalls ?			0x00000008 : 0);
 	dwSave |= (m_fAvoidWalls ?				0x00000010 : 0);

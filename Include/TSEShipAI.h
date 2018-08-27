@@ -34,13 +34,9 @@ struct SCrewMetrics
 
 struct SPlayerChangedShipsCtx
 	{
-	SPlayerChangedShipsCtx (void) :
-			bOldShipWaits(false),
-			bNoOrderTransfer(false)
-		{ }
-
-	bool bOldShipWaits;				//	If TRUE, old ship waits and orders are set appropriately
-	bool bNoOrderTransfer;			//	If TRUE, do not change orders to point to new ship
+	bool bOldShipWaits = false;				//	If TRUE, old ship waits and orders are set appropriately
+	bool bNoOrderTransfer = false;			//	If TRUE, do not change orders to point to new ship
+	bool bTransferEquipment = false;		//	If TRUE, transfer equipment, such as targeting computer
 	};
 
 //  CAISettings ----------------------------------------------------------------
@@ -245,7 +241,7 @@ class IShipController
 			orderHoldAndAttack,			//	pTarget = target to destroy; dwData = timer.
 			orderGoToPos,				//	dwData = vector destination
 			orderWaitForThreat,			//	dwData = seconds to wait (0 == indefinitely)
-			orderSentry,				//	Sentry mode (for turrets) pTarget = obj to guard; dwData = timer (0 == indefinitely)
+			orderSentry,				//	Sentry mode (for turrets) pTarget = obj to guard (optional); dwData = timer (0 == indefinitely)
 			};
 
 		enum EShipStatusNotifications
@@ -258,6 +254,8 @@ class IShipController
 			statusReactorOverloadWarning,	//	dwData = sequence
 			statusReactorPowerFailure,		//	Reactor is dead
 			statusReactorRestored,			//	Reactor is functioning normally
+			statusTimeStopped,				//	Time stopped
+			statusTimeRestored,				//	Time continues
 			};
 
 		virtual ~IShipController (void) { }
@@ -265,6 +263,7 @@ class IShipController
 		virtual void AccumulateCrewMetrics (SCrewMetrics &Metrics) { }
 		virtual void Behavior (SUpdateCtx &Ctx) { }
 		virtual void CancelDocking (void) { }
+		virtual bool CanObjRequestDock (void) const { return true; }
 		virtual CString DebugCrashInfo (void) { return NULL_STR; }
 		virtual void DebugPaintInfo (CG32bitImage &Dest, int x, int y, SViewportPaintCtx &Ctx) { }
         virtual ICCItem *FindProperty (const CString &sProperty) { return NULL; }
@@ -291,6 +290,7 @@ class IShipController
 		virtual void GetWeaponTarget (STargetingCtx &TargetingCtx, CItemCtx &ItemCtx, CSpaceObject **retpTarget, int *retiFireSolution) { }
 		virtual bool IsAngryAt (CSpaceObject *pObj) const { return false; }
 		virtual bool IsPlayer (void) const { return false; }
+		virtual bool IsPlayerBlacklisted (void) const { return false; }
 		virtual bool IsPlayerWingman (void) const { return false; }
 		virtual void ReadFromStream (SLoadCtx &Ctx, CShip *pShip) { ASSERT(false); }
 		virtual int SetAISettingInteger (const CString &sSetting, int iValue) { return 0; }
@@ -299,6 +299,7 @@ class IShipController
 		virtual void SetManeuver (EManeuverTypes iManeuver) { }
 		virtual void SetShipToControl (CShip *pShip) { }
 		virtual void SetThrust (bool bThrust) { }
+		virtual void SetPlayerBlacklisted (bool bValue) { }
 		virtual void SetPlayerWingman (bool bIsWingman) { }
 		virtual void WriteToStream (IWriteStream *pStream) { ASSERT(false); }
 
@@ -338,6 +339,7 @@ class IShipController
 		virtual void OnObjDamaged (const SDamageCtx &Ctx) { }
 		virtual void OnObjDestroyed (const SDestroyCtx &Ctx) { }
 		virtual void OnObjEnteredGate (CSpaceObject *pObj, CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pStargate) { }
+		virtual void OnOverlayConditionChanged (CConditionSet::ETypes iCondition, CConditionSet::EModifications iChange) { }
 		virtual void OnPaintSRSEnhancements (CG32bitImage &Dest, SViewportPaintCtx &Ctx) { }
 		virtual void OnPlayerChangedShips (CSpaceObject *pOldShip, SPlayerChangedShipsCtx &Options) { }
 		virtual void OnPlayerObj (CSpaceObject *pPlayer) { }

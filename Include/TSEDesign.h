@@ -223,15 +223,23 @@ class CDesignType
 		inline void ClearMark (void) { OnClearMark(); }
 		inline CEffectCreator *FindEffectCreatorInType (const CString &sUNID) { return OnFindEffectCreator(sUNID); }
 		bool FindEventHandler (const CString &sEvent, SEventHandlerDesc *retEvent = NULL) const;
-		inline bool FindEventHandler (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const { if (!m_pExtra) return false; if (retEvent) *retEvent = m_pExtra->EventsCache[iEvent]; return (m_pExtra->EventsCache[iEvent].pCode != NULL); }
-		bool FindStaticData (const CString &sAttrib, const CString **retpData) const;
+		inline bool FindEventHandler (ECachedHandlers iEvent, SEventHandlerDesc *retEvent = NULL) const 
+			{
+			if (!m_pExtra || !m_pExtra->EventsCache[iEvent].pCode) 
+				return false;
+				
+			if (retEvent) *retEvent = m_pExtra->EventsCache[iEvent]; 
+			return true;
+			}
+
+		bool FindStaticData (const CString &sAttrib, ICCItemPtr &pData) const;
 		void FireCustomEvent (const CString &sEvent, ECodeChainEvents iEvent = eventNone, ICCItem *pData = NULL, ICCItem **retpResult = NULL);
 		bool FireGetCreatePos (CSpaceObject *pBase, CSpaceObject *pTarget, CSpaceObject **retpGate, CVector *retvPos);
 		void FireGetGlobalAchievements (CGameStats &Stats);
-		bool FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpaceObject *pObj, CString *retsScreen, ICCItem **retpData, int *retiPriority);
+		bool FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpaceObject *pObj, CString *retsScreen = NULL, ICCItemPtr *retpData = NULL, int *retiPriority = NULL);
 		bool FireGetGlobalPlayerPriceAdj (const SEventHandlerDesc &Event, STradeServiceCtx &ServiceCtx, ICCItem *pData, int *retiPriceAdj);
 		int FireGetGlobalResurrectPotential (void);
-		void FireObjCustomEvent (const CString &sEvent, CSpaceObject *pObj, ICCItem **retpResult);
+		void FireObjCustomEvent (const CString &sEvent, CSpaceObject *pObj, ICCItem *pData = NULL, ICCItem **retpResult = NULL);
 		ALERROR FireOnGlobalDockPaneInit (const SEventHandlerDesc &Event, void *pScreen, DWORD dwScreenUNID, const CString &sScreen, const CString &sPane, CString *retsError);
 		void FireOnGlobalEndDiagnostics (const SEventHandlerDesc &Event);
 		void FireOnGlobalIntroCommand (const SEventHandlerDesc &Event, const CString &sCommand);
@@ -266,26 +274,28 @@ class CDesignType
 		ICCItem *GetEventHandler (const CString &sEvent) const;
 		void GetEventHandlers (const CEventHandler **retHandlers, TSortMap<CString, SEventHandlerDesc> *retInheritedHandlers);
 		CExtension *GetExtension (void) const { return m_pExtension; }
-		inline const CString &GetGlobalData (const CString &sAttrib) { return (m_pExtra ? m_pExtra->GlobalData.GetData(sAttrib) : NULL_STR); }
+		ICCItemPtr GetGlobalData (const CString &sAttrib) const;
 		inline CDesignType *GetInheritFrom (void) const { return m_pInheritFrom; }
 		inline DWORD GetInheritFromUNID (void) const { return m_dwInheritFrom; }
 		inline CXMLElement *GetLocalScreens (void) const { return (m_pExtra ? m_pExtra->pLocalScreens : NULL); }
         CString GetMapDescription (SMapDescriptionCtx &Ctx) const;
+		CLanguageDataBlock GetMergedLanguageBlock (void) const;
 		CString GetNounPhrase (DWORD dwFlags = 0) const;
 		ICCItem *GetProperty (CCodeChainCtx &Ctx, const CString &sProperty) const;
 		int GetPropertyInteger (const CString &sProperty);
 		CString GetPropertyString (const CString &sProperty);
 		CXMLElement *GetScreen (const CString &sUNID);
-		const CString &GetStaticData (const CString &sAttrib) const;
+		ICCItemPtr GetStaticData (const CString &sAttrib) const;
 		CString GetTypeClassName (void) const;
 		inline DWORD GetUNID (void) const { return m_dwUNID; }
 		inline CXMLElement *GetXMLElement (void) const { return m_pXML; }
 		TSortMap<DWORD, DWORD> GetXMLMergeFlags (void) const;
 		bool HasAttribute (const CString &sAttrib) const;
 		inline bool HasEvents (void) const { return !m_Events.IsEmpty() || (m_pInheritFrom && m_pInheritFrom->HasEvents()); }
+		bool HasLanguageBlock (void) const;
 		inline bool HasLiteralAttribute (const CString &sAttrib) const { return ::HasModifier(m_sAttributes, sAttrib); }
 		bool HasSpecialAttribute (const CString &sAttrib) const;
-        inline void IncGlobalData (const CString &sAttrib, ICCItem *pValue = NULL, ICCItem **retpNewValue = NULL) { SetExtra()->GlobalData.IncData(sAttrib, pValue, retpNewValue); }
+        inline ICCItemPtr IncGlobalData (const CString &sAttrib, ICCItem *pValue = NULL) { return SetExtra()->GlobalData.IncData(sAttrib, pValue); }
 		bool InheritsFrom (DWORD dwUNID) const;
 		void InitCachedEvents (int iCount, char **pszEvents, SEventHandlerDesc *retEvents);
 		inline bool IsClone (void) const { return m_bIsClone; }
@@ -294,7 +304,7 @@ class CDesignType
 		inline bool IsObsoleteAt (DWORD dwAPIVersion) const { return (m_dwObsoleteVersion > 0 && dwAPIVersion >= m_dwObsoleteVersion); }
 		inline bool IsOptional (void) const { return (m_dwObsoleteVersion > 0) || (m_pExtra && (m_pExtra->Excludes.GetCount() > 0 || m_pExtra->Extends.GetCount() > 0)); }
 		inline void MarkImages (void) { OnMarkImages(); }
-		inline void SetGlobalData (const CString &sAttrib, const CString &sData) { SetExtra()->GlobalData.SetData(sAttrib, sData); }
+		inline void SetGlobalData (const CString &sAttrib, ICCItem *pData) { SetExtra()->GlobalData.SetData(sAttrib, pData); }
 		inline void SetInheritFrom (CDesignType *pType) { m_pInheritFrom = pType; }
 		inline void SetMerged (bool bValue = true) { m_bIsMerged = true; }
 		inline void SetUNID (DWORD dwUNID) { m_dwUNID = dwUNID; }
@@ -657,6 +667,7 @@ class CGenericType : public CDesignType
 
 //	Station Definitions --------------------------------------------------------
 
+#include "TSEObjectCriteria.h"
 #include "TSEDockScreenType.h"
 #include "TSEStationType.h"
 
@@ -1195,7 +1206,7 @@ class CDesignCollection
 		CExtension *FindExtension (DWORD dwUNID) const;
 		CXMLElement *FindSystemFragment (const CString &sName, CSystemTable **retpTable = NULL) const;
 		void FireGetGlobalAchievements (CGameStats &Stats);
-		bool FireGetGlobalDockScreen (CSpaceObject *pObj, CString *retsScreen = NULL, ICCItem **retpData = NULL, int *retiPriority = NULL);
+		bool FireGetGlobalDockScreen (CSpaceObject *pObj, CString *retsScreen = NULL, ICCItemPtr *retpData = NULL, int *retiPriority = NULL);
 		bool FireGetGlobalPlayerPriceAdj (STradeServiceCtx &ServiceCtx, ICCItem *pData, int *retiPriceAdj);
 		void FireOnGlobalEndDiagnostics (void);
 		void FireOnGlobalIntroCommand (const CString &sCommand);

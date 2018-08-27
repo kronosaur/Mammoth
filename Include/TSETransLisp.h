@@ -33,6 +33,8 @@ class ICCItemPtr
 
 		void Delete (void);
 
+		bool Load (const CString &sCode, CString *retsError);
+
 		void TakeHandoff (ICCItem *pPtr);
 		void TakeHandoff (ICCItemPtr &Src);
 
@@ -62,6 +64,7 @@ class CTLispConvert
 
 		static ETypes ArgType (ICCItem *pItem, ETypes iDefaultType, ICCItem **retpValue = NULL);
 		static DWORD AsImageDesc (ICCItem *pItem, RECT *retrcRect);
+		static bool AsScreen (ICCItem *pItem, CString *retsScreen = NULL, ICCItemPtr *retpData = NULL, int *retiPriority = NULL);
 		static ICCItemPtr CreateCurrencyValue (CCodeChain &CC, CurrencyValue Value);
 	};
 
@@ -92,6 +95,10 @@ class CCodeChainCtx
 		CCodeChainCtx (void);
 		~CCodeChainCtx (void);
 
+		void DefineContainingType (CDesignType *pType);
+		void DefineContainingType (const CItem &Item);
+		void DefineContainingType (const COverlay *pOverlay);
+		void DefineContainingType (CSpaceObject *pObj);
 		inline ICCItem *CreateNil (void) { return m_CC.CreateNil(); }
 		inline void DefineBool (const CString &sVar, bool bValue) { m_CC.DefineGlobal(sVar, (bValue ? m_CC.CreateTrue() : m_CC.CreateNil())); }
 		void DefineDamageCtx (const SDamageCtx &Ctx, int iDamage = -1);
@@ -120,6 +127,7 @@ class CCodeChainCtx
 		void RestoreVars (void);
 		ICCItem *Run (ICCItem *pCode);
 		ICCItem *Run (const SEventHandlerDesc &Event);
+		ICCItemPtr RunCode (const SEventHandlerDesc &Event);
 		bool RunEvalString (const CString &sString, bool bPlain, CString *retsResult);
 		ICCItem *RunLambda (ICCItem *pCode);
 		void SaveAndDefineDataVar (ICCItem *pData);
@@ -128,6 +136,7 @@ class CCodeChainCtx
 		void SaveAndDefineOverlayID (DWORD dwID);
 		void SaveAndDefineSourceVar (CSpaceObject *pSource);
 		void SaveAndDefineSovereignVar (CSovereign *pSource);
+		void SaveAndDefineType (DWORD dwUNID);
 		void SaveItemVar (void);
 		void SaveSourceVar (void);
 		inline void SetDockScreenList (IListData *pListData) { m_pListData = pListData; }
@@ -176,6 +185,7 @@ class CCodeChainCtx
 		ICCItem *m_pOldSource;
 		ICCItem *m_pOldItem;
 		ICCItem *m_pOldOverlayID;
+		ICCItem *m_pOldType;
 
 		bool m_bRestoreGlobalDefineHook;
 		IItemTransform *m_pOldGlobalDefineHook;
@@ -255,4 +265,80 @@ class CCXMLWrapper : public ICCAtom
 	private:
 		CXMLElement *m_pXML;
 		ICCItem *m_pRef;
+	};
+
+class CAttributeDataBlock
+	{
+	public:
+        enum ETransferOptions
+            {
+            transCopy,
+            transIgnore,
+            };
+
+        struct STransferDesc
+            {
+            STransferDesc (void) :
+                    iOption(transCopy)
+                { }
+
+            ETransferOptions iOption;
+            };
+
+		CAttributeDataBlock (void);
+		CAttributeDataBlock (const CAttributeDataBlock &Src);
+		CAttributeDataBlock &operator= (const CAttributeDataBlock &Src);
+		~CAttributeDataBlock (void);
+
+		void Copy (const CAttributeDataBlock &Src, const TSortMap<CString, STransferDesc> &Options);
+		inline void DeleteAll (void) { CleanUp(); }
+//		bool FindData (const CString &sAttrib, const CString **retpData = NULL) const;
+		bool FindDataAsItem (const CString &sAttrib, ICCItemPtr &pResult) const;
+		bool FindObjRefData (CSpaceObject *pObj, CString *retsAttrib = NULL) const;
+		ICCItemPtr GetData (int iIndex) const;
+		ICCItemPtr GetDataAsItem (const CString &sAttrib) const;
+		inline const CString &GetDataAttrib (int iIndex) const { return m_Data.GetKey(iIndex); }
+		inline int GetDataCount (void) const { return m_Data.GetCount(); }
+		CSpaceObject *GetObjRefData (const CString &sAttrib) const;
+        ICCItemPtr IncData (const CString &sAttrib, ICCItem *pValue = NULL);
+		bool IsDataNil (const CString &sAttrib) const;
+		inline bool IsEmpty (void) const { return (m_Data.GetCount() == 0 && m_pObjRefData == NULL); }
+		bool IsEqual (const CAttributeDataBlock &Src);
+		void LoadObjReferences (CSystem *pSystem);
+		void MergeFrom (const CAttributeDataBlock &Src);
+		void OnObjDestroyed (CSpaceObject *pObj);
+		void OnSystemChanged (CSystem *pSystem);
+		void ReadFromStream (SLoadCtx &Ctx);
+		void ReadFromStream (IReadStream *pStream);
+		void SetData (const CString &sAttrib, ICCItem *pItem);
+		void SetFromXML (CXMLElement *pData);
+		void SetObjRefData (const CString &sAttrib, CSpaceObject *pObj);
+		void WriteToStream (IWriteStream *pStream, CSystem *pSystem = NULL);
+
+		static const CAttributeDataBlock Null;
+
+	private:
+        struct SDataEntry
+            {
+            ICCItemPtr pData;
+            };
+
+		struct SObjRefEntry
+			{
+			CString sName;
+			CSpaceObject *pObj;
+			DWORD dwObjID;
+
+			SObjRefEntry *pNext;
+			};
+
+		void CleanUp (void);
+        void CleanUpObjRefs (void);
+		void Copy (const CAttributeDataBlock &Copy);
+        void CopyObjRefs (SObjRefEntry *pSrc);
+		bool IsXMLText (const CString &sData) const;
+        void ReadDataEntries (IReadStream *pStream);
+
+        TSortMap<CString, SDataEntry> m_Data;
+		SObjRefEntry *m_pObjRefData;			//	Custom pointers to CSpaceObject *
 	};

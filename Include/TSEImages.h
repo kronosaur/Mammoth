@@ -6,6 +6,7 @@
 #pragma once
 
 class CCompositeImageModifiers;
+class CSystemType;
 
 struct SPointInObjectCtx
 	{
@@ -61,6 +62,55 @@ struct SLightingCtx
 	CVector vIncY;
 	};
 
+class CImageFilterDesc
+	{
+	public:
+		enum ETypes
+			{
+			filterNone,
+
+			filterBloom,					//	iData1 = clip point (0-255)
+			filterColorize,					//	iData1 = hue, iData2 = saturation, iData3 = brightness, byOpacity = fade
+			filterHueSaturation,			//	iData1 = hue, iData2 = saturation, iData3 = brightness, byOpactiy = fade
+			filterLevels,					//	iData1 = black point, iData2 = white point, rData1 = gamma
+			};
+
+		CImageFilterDesc (void);
+
+		bool operator== (const CImageFilterDesc &Val) const;
+		bool operator!= (const CImageFilterDesc &Val) const { return (*this == Val ? false : true); }
+
+		void ApplyTo (CG32bitImage &Image) const;
+		ALERROR InitFromXML (SDesignLoadCtx &Ctx, const CXMLElement &Desc);
+
+	private:
+		void ApplyBloom (CG32bitImage &Dest, int iClipPoint) const;
+		void ApplyColorize (CG32bitImage &Dest, int iHue, int iSaturation, int iBrightness, BYTE byOpacity) const;
+		void ApplyHueSaturation (CG32bitImage &Dest, int iHue, int iSaturation, int iBrightness, BYTE byOpacity) const;
+		void ApplyLevels (CG32bitImage &Dest, int iBlack, int iWhite, Metric rGamma) const;
+
+		ETypes m_iType;
+		int m_iData1;
+		int m_iData2;
+		int m_iData3;
+		Metric m_rData1;
+		BYTE m_byOpacity;
+	};
+
+class CImageFilterStack
+	{
+	public:
+		bool operator== (const CImageFilterStack &Val) const;
+		bool operator!= (const CImageFilterStack &Val) const { return (*this == Val ? false : true); }
+
+		void ApplyTo (CG32bitImage &Image) const;
+		ALERROR InitFromXML (SDesignLoadCtx &Ctx, const CXMLElement &Desc);
+		inline bool IsEmpty (void) const { return (m_Stack.GetCount() == 0); }
+
+	private:
+		TArray<CImageFilterDesc> m_Stack;
+	};
+
 class CObjectImage : public CDesignType
 	{
 	public:
@@ -97,24 +147,25 @@ class CObjectImage : public CDesignType
 		virtual void OnUnbindDesign (void);
 
 	private:
+		void CleanUp (void);
 		CG32bitImage *LoadImageFromDb (CResourceDb &ResDb, const CString &sLoadReason, CString *retsError = NULL) const;
 		bool LoadMask(const CString &sFilespec, CG32bitImage **retpImage);
 
-		CString m_sResourceDb;			//	Resource db
-		CString m_sBitmap;				//	Bitmap resource within db
-		CString m_sBitmask;				//	Bitmask resource within db
-		CString m_sHitMask;				//	Optional mask to use for hit testing
-		CString m_sShadowMask;			//	Optional mask to use to generate volumetric shadow
-		bool m_bPreMult;				//	If TRUE, image needs to be premultiplied with mask on load.
-		bool m_bLoadOnUse;				//	If TRUE, image is only loaded when needed
-		mutable bool m_bFreeBitmap;		//	If TRUE, we free the bitmap when done
+		CString m_sResourceDb;					//	Resource db
+		CString m_sBitmap;						//	Bitmap resource within db
+		CString m_sBitmask;						//	Bitmask resource within db
+		CString m_sHitMask;						//	Optional mask to use for hit testing
+		CString m_sShadowMask;					//	Optional mask to use to generate volumetric shadow
+		bool m_bPreMult = false;				//	If TRUE, image needs to be premultiplied with mask on load.
+		bool m_bLoadOnUse = false;				//	If TRUE, image is only loaded when needed
+		mutable bool m_bFreeBitmap = false;		//	If TRUE, we free the bitmap when done
 
-		mutable CG32bitImage *m_pBitmap;//	Loaded image (NULL if not loaded)
-		CG32bitImage *m_pHitMask;		//	NULL if not loaded
-		CG32bitImage *m_pShadowMask;	//	NULL if not loaded
-		bool m_bMarked;					//	Marked
-		bool m_bLocked;					//	Image is never unloaded
-		mutable bool m_bLoadError;		//	If TRUE, load failed
+		mutable CG32bitImage *m_pBitmap = NULL;	//	Loaded image (NULL if not loaded)
+		CG32bitImage *m_pHitMask = NULL;		//	NULL if not loaded
+		CG32bitImage *m_pShadowMask = NULL;		//	NULL if not loaded
+		bool m_bMarked = false;					//	Marked
+		bool m_bLocked = false;					//	Image is never unloaded
+		mutable bool m_bLoadError = false;		//	If TRUE, load failed
 	};
 
 class CObjectImageArray
@@ -136,6 +187,7 @@ class CObjectImageArray
 		ALERROR Init (DWORD dwBitmapUNID, int iFrameCount, int iTicksPerFrame, bool bResolveNow = false);
 		ALERROR Init (DWORD dwBitmapUNID, const RECT &rcImage, int iFrameCount, int iTicksPerFrame);
 		ALERROR Init (CObjectImage *pImage, const RECT &rcImage, int iFrameCount, int iTicksPerFrame);
+		ALERROR InitFromFrame (const CObjectImageArray &Source, int iTick, int iRotationIndex);
 		ALERROR InitFromRotated (const CObjectImageArray &Source, int iTick, int iVariant, int iRotation);
 		ALERROR InitFromXML (CXMLElement *pDesc);
 		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, bool bResolveNow = false, int iDefaultRotationCount = 1);
@@ -143,6 +195,7 @@ class CObjectImageArray
 
 		bool CalcVolumetricShadowLine (SLightingCtx &Ctx, int iTick, int iRotation, int *retxCenter, int *retyCenter, int *retiWidth, int *retiLength) const;
 		void CleanUp (void);
+		inline void ClearMark (void) { if (m_pImage) m_pImage->ClearMark(); }
 		void CopyImage (CG32bitImage &Dest, int x, int y, int iFrame, int iRotation) const;
 		inline DWORD GetBitmapUNID (void) const { return m_dwBitmapUNID; }
 		CString GetFilename (void) const;
@@ -159,6 +212,7 @@ class CObjectImageArray
 		inline int GetImageWidth (void) const { return RectWidth(m_rcImage); }
 		inline bool HasAlpha (void) const { return (m_pImage ? m_pImage->HasAlpha() : false); }
 		bool ImagesIntersect (int iTick, int iRotation, int x, int y, const CObjectImageArray &Image2, int iTick2, int iRotation2) const;
+		inline bool IsAnimated (void) const { return (m_iTicksPerFrame > 0 && m_iFrameCount > 1); }
 		inline bool IsEmpty (void) const { return ((m_pImage == NULL) && (m_dwBitmapUNID == 0)); }
 		inline bool IsLoaded (void) const { return (m_pImage != NULL); }
         inline bool IsMarked (void) const { return (m_pImage && m_pImage->IsMarked()); }
@@ -195,6 +249,7 @@ class CObjectImageArray
 		bool PointInImage (SPointInObjectCtx &Ctx, int x, int y) const;
 		void PointInImageInit (SPointInObjectCtx &Ctx, int iTick, int iRotation) const;
 		void ReadFromStream (SLoadCtx &Ctx);
+		void SetImage (CObjectImage *pImage);
 		void SetRotationCount (int iRotationCount);
 		void TakeHandoff (CObjectImageArray &Source);
 		void WriteToStream (IWriteStream *pStream) const;
@@ -281,7 +336,9 @@ class CCompositeImageSelector
 		ETypes GetType (DWORD dwID) const;
 		int GetVariant (DWORD dwID) const;
 		inline bool HasShipwreckImage (DWORD dwID = DEFAULT_SELECTOR_ID) const { return (GetShipwreckClass(dwID) != NULL); }
+		void ReadFromItem (ICCItemPtr pData);
 		void ReadFromStream (SLoadCtx &Ctx);
+		ICCItemPtr WriteToItem (void) const;
 		void WriteToStream (IWriteStream *pStream) const;
 
         inline static const CCompositeImageSelector &Null (void) { return g_NullSelector; }
@@ -342,18 +399,20 @@ class CCompositeImageModifiers
 	{
 	public:
 		CCompositeImageModifiers (void) :
-				m_iRotation(0),
-				m_rgbFadeColor(0),
-				m_wFadeOpacity(0),
-				m_fStationDamage(false)
+				m_fStationDamage(false),
+				m_fFullImage(false)
 			{ }
 
 		bool operator== (const CCompositeImageModifiers &Val) const;
 
 		void Apply (CObjectImageArray *retImage) const;
+		inline const CImageFilterStack *GetFilters (void) const { return m_pFilters; }
 		inline int GetRotation (void) const { return m_iRotation; }
-		inline bool IsEmpty (void) const { return (m_wFadeOpacity == 0 && !m_fStationDamage); }
+		inline bool IsEmpty (void) const { return (m_wFadeOpacity == 0 && !m_fStationDamage && m_pFilters == NULL); }
+		inline bool ReturnFullImage (void) const { return (m_fFullImage ? true : false); }
 		inline void SetFadeColor (CG32bitPixel rgbColor, DWORD dwOpacity) { m_rgbFadeColor = rgbColor; m_wFadeOpacity = (WORD)dwOpacity; }
+		inline void SetFilters (const CImageFilterStack *pFilters) { m_pFilters = pFilters; }
+		inline void SetFullImage (bool bValue = true) { m_fFullImage = bValue; }
 		inline void SetRotation (int iRotation) { m_iRotation = AngleMod(iRotation); }
 		inline void SetStationDamage (bool bValue = true) { m_fStationDamage = bValue; }
 
@@ -365,12 +424,14 @@ class CCompositeImageModifiers
 
 		CG32bitImage *CreateCopy (CObjectImageArray *pImage, RECT *retrcNewImage) const;
 
-		int m_iRotation;					//	Rotation
-		CG32bitPixel m_rgbFadeColor;		//	Apply a wash on top of image
-		WORD m_wFadeOpacity;				//		0 = no wash
+		int m_iRotation = 0;				//	Rotation
+		const CImageFilterStack *m_pFilters = NULL;
+		CG32bitPixel m_rgbFadeColor = 0;	//	Apply a wash on top of image
+		WORD m_wFadeOpacity = 0;			//		0 = no wash
 
 		DWORD m_fStationDamage:1;			//	Apply station damage to image
-		DWORD m_dwSpare:31;
+		DWORD m_fFullImage:1;				//	Return full image even if we have rotations
+		DWORD m_dwSpare:30;
 	};
 
 class CCompositeImageDesc

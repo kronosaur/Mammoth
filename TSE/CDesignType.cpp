@@ -101,6 +101,7 @@
 #define PROPERTY_MAP_DESCRIPTION				CONSTLIT("mapDescription")
 #define PROPERTY_MERGED							CONSTLIT("merged")
 #define PROPERTY_NAME_PATTERN					CONSTLIT("namePattern")
+#define PROPERTY_UNID							CONSTLIT("unid")
 
 #define FIELD_ENTITY							CONSTLIT("entity")
 #define FIELD_EXTENSION_UNID					CONSTLIT("extensionUNID")
@@ -564,6 +565,7 @@ ICCItem *CDesignType::FindBaseProperty (CCodeChainCtx &Ctx, const CString &sProp
 	CCodeChain &CC = g_pUniverse->GetCC();
 	CString sValue;
 	ICCItem *pResult;
+	ICCItemPtr pValue;
 
 	if (strEquals(sProperty, PROPERTY_API_VERSION))
 		return CC.CreateInteger(GetAPIVersion());
@@ -608,6 +610,9 @@ ICCItem *CDesignType::FindBaseProperty (CCodeChainCtx &Ctx, const CString &sProp
 		return pResult;
 		}
 
+    else if (strEquals(sProperty, PROPERTY_UNID))
+		return CC.CreateInteger(GetUNID());
+
 	//	Otherwise, we see if there is a data field
 
 	else if (FindDataField(sProperty, &sValue))
@@ -615,8 +620,8 @@ ICCItem *CDesignType::FindBaseProperty (CCodeChainCtx &Ctx, const CString &sProp
 
 	//	Lastly, see if there is static data
 
-	else if (m_pExtra && (pResult = m_pExtra->StaticData.FindDataAsItem(sProperty)))
-		return pResult;
+	else if (m_pExtra && (m_pExtra->StaticData.FindDataAsItem(sProperty, pValue)))
+		return pValue->Reference();
 
 	//	Not found
 
@@ -740,18 +745,18 @@ bool CDesignType::FindEventHandler (const CString &sEvent, SEventHandlerDesc *re
 	return false;
 	}
 
-bool CDesignType::FindStaticData (const CString &sAttrib, const CString **retpData) const
+bool CDesignType::FindStaticData (const CString &sAttrib, ICCItemPtr &pData) const
 
 //	FindStaticData
 //
 //	Returns static data
 
 	{
-	if (m_pExtra && m_pExtra->StaticData.FindData(sAttrib, retpData))
+	if (m_pExtra && m_pExtra->StaticData.FindDataAsItem(sAttrib, pData))
 		return true;
 
 	if (m_pInheritFrom)
-		return m_pInheritFrom->FindStaticData(sAttrib, retpData);
+		return m_pInheritFrom->FindStaticData(sAttrib, pData);
 
 	return false;
 	}
@@ -769,6 +774,7 @@ void CDesignType::FireCustomEvent (const CString &sEvent, ECodeChainEvents iEven
 	if (FindEventHandler(sEvent, &Event))
 		{
 		Ctx.SetEvent(iEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineDataVar(pData);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -803,7 +809,7 @@ bool CDesignType::FireGetCreatePos (CSpaceObject *pBase, CSpaceObject *pTarget, 
 	if (FindEventHandler(GET_CREATE_POS_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aBaseObj"), pBase);
 		Ctx.DefineSpaceObject(CONSTLIT("aTargetObj"), pTarget);
 
@@ -849,9 +855,9 @@ void CDesignType::FireGetGlobalAchievements (CGameStats &Stats)
 	if (FindEventHandler(GET_GLOBAL_ACHIEVEMENTS_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		//	Run code
-
+		
 		ICCItem *pResult = Ctx.Run(Event);
 		if (pResult->IsError())
 			ReportEventError(GET_GLOBAL_ACHIEVEMENTS_EVENT, pResult);
@@ -898,7 +904,7 @@ void CDesignType::FireGetGlobalAchievements (CGameStats &Stats)
 		}
 	}
 
-bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpaceObject *pObj, CString *retsScreen, ICCItem **retpData, int *retiPriority)
+bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpaceObject *pObj, CString *retsScreen, ICCItemPtr *retpData, int *retiPriority)
 
 //	FireGetGlobalDockScreen
 //
@@ -912,56 +918,19 @@ bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpac
 	//	Set up
 
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 	Ctx.SaveAndDefineSourceVar(pObj);
 
 	//	Run
 
-	ICCItem *pResult = Ctx.Run(Event);
-
-	bool bResult;
-
-	//	Error?
-
+	ICCItemPtr pResult = Ctx.RunCode(Event);
 	if (pResult->IsError())
 		{
 		ReportEventError(GET_GLOBAL_DOCK_SCREEN_EVENT, pResult);
-		bResult = false;
+		return false;
 		}
 
-	//	Parse the result
-
-	else if (pResult->IsNil())
-		bResult = false;
-
-	else if (pResult->IsList() && pResult->GetCount() >= 2)
-		{
-		*retsScreen = pResult->GetElement(0)->GetStringValue();
-		if (pResult->GetCount() >= 3)
-			{
-			*retpData = pResult->GetElement(1)->Reference();
-			*retiPriority = pResult->GetElement(2)->GetIntegerValue();
-			}
-		else
-			{
-			*retpData = NULL;
-			*retiPriority = pResult->GetElement(1)->GetIntegerValue();
-			}
-		bResult = true;
-		}
-	else if (pResult->GetCount() > 0)
-		{
-		*retsScreen = pResult->GetElement(0)->GetStringValue();
-		*retiPriority = 0;
-		*retpData = NULL;
-		bResult = true;
-		}
-	else
-		bResult = false;
-
-	//	Done
-
-	Ctx.Discard(pResult);
-	return bResult;
+	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
 	}
 
 bool CDesignType::FireGetGlobalPlayerPriceAdj (const SEventHandlerDesc &Event, STradeServiceCtx &ServiceCtx, ICCItem *pData, int *retiPriceAdj)
@@ -972,7 +941,7 @@ bool CDesignType::FireGetGlobalPlayerPriceAdj (const SEventHandlerDesc &Event, S
 
 	{
 	CCodeChainCtx Ctx;
-
+	Ctx.DefineContainingType(this);
 	//	Set up
 
 	Ctx.SetEvent(eventGetGlobalPlayerPriceAdj);
@@ -1027,7 +996,7 @@ int CDesignType::FireGetGlobalResurrectPotential (void)
 	if (FindEventHandler(GET_GLOBAL_RESURRECT_POTENTIAL_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		//	Run code
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -1042,7 +1011,7 @@ int CDesignType::FireGetGlobalResurrectPotential (void)
 	return iResult;
 	}
 
-void CDesignType::FireObjCustomEvent (const CString &sEvent, CSpaceObject *pObj, ICCItem **retpResult)
+void CDesignType::FireObjCustomEvent (const CString &sEvent, CSpaceObject *pObj, ICCItem *pData, ICCItem **retpResult)
 
 //	FireObjCustomEvent
 //
@@ -1054,7 +1023,9 @@ void CDesignType::FireObjCustomEvent (const CString &sEvent, CSpaceObject *pObj,
 	SEventHandlerDesc Event;
 	if (FindEventHandler(sEvent, &Event))
 		{
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pObj);
+		Ctx.SaveAndDefineDataVar(pData);
 
 		ICCItem *pResult = Ctx.Run(Event);
 		if (pResult->IsError())
@@ -1082,7 +1053,7 @@ ALERROR CDesignType::FireOnGlobalDockPaneInit (const SEventHandlerDesc &Event, v
 
 	{
 	CCodeChainCtx Ctx;
-
+	Ctx.DefineContainingType(this);
 	//	Set up
 
 	Ctx.SetScreen(pScreen);
@@ -1108,8 +1079,9 @@ void CDesignType::FireOnGlobalIntroCommand(const SEventHandlerDesc &Event, const
 //
 //	Fire event
 
-{
+	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 	Ctx.DefineString(CONSTLIT("aCommand"), sCommand);
 
 	//	Run code
@@ -1121,7 +1093,7 @@ void CDesignType::FireOnGlobalIntroCommand(const SEventHandlerDesc &Event, const
 	//	Done
 
 	Ctx.Discard(pResult);
-}
+	}
 
 void CDesignType::FireOnGlobalIntroStarted (const SEventHandlerDesc &Event)
 
@@ -1129,8 +1101,9 @@ void CDesignType::FireOnGlobalIntroStarted (const SEventHandlerDesc &Event)
 //
 //	Fire event
 
-{
+	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Run code
 
@@ -1141,7 +1114,7 @@ void CDesignType::FireOnGlobalIntroStarted (const SEventHandlerDesc &Event)
 	//	Done
 
 	Ctx.Discard(pResult);
-}
+	}
 
 void CDesignType::FireOnGlobalPlayerBoughtItem (const SEventHandlerDesc &Event, CSpaceObject *pSellerObj, const CItem &Item, const CCurrencyAndValue &Price)
 
@@ -1151,6 +1124,7 @@ void CDesignType::FireOnGlobalPlayerBoughtItem (const SEventHandlerDesc &Event, 
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Set up
 
@@ -1176,6 +1150,7 @@ void CDesignType::FireOnGlobalPlayerSoldItem (const SEventHandlerDesc &Event, CS
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Set up
 
@@ -1237,6 +1212,7 @@ void CDesignType::FireOnGlobalObjDestroyed (const SEventHandlerDesc &Event, SDes
 
 	{
 	CCodeChainCtx CCCtx;
+	CCCtx.DefineContainingType(this);
 
 	CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
 	CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
@@ -1265,6 +1241,7 @@ ALERROR CDesignType::FireOnGlobalPlayerChangedShips (CSpaceObject *pOldShip, CSt
 	if (FindEventHandler(ON_GLOBAL_PLAYER_CHANGED_SHIPS_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 
 		Ctx.DefineSpaceObject(CONSTLIT("aOldPlayerShip"), pOldShip);
 
@@ -1292,6 +1269,7 @@ ALERROR CDesignType::FireOnGlobalPlayerEnteredSystem (CString *retsError)
 	if (FindEventHandler(ON_GLOBAL_PLAYER_ENTERED_SYSTEM_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 
 		//	Run code
 
@@ -1317,6 +1295,7 @@ ALERROR CDesignType::FireOnGlobalPlayerLeftSystem (CString *retsError)
 	if (FindEventHandler(ON_GLOBAL_PLAYER_LEFT_SYSTEM_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 
 		//	Run code
 
@@ -1342,6 +1321,7 @@ ALERROR CDesignType::FireOnGlobalResurrect (CString *retsError)
 	if (FindEventHandler(ON_GLOBAL_RESURRECT_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 
 		//	Run code
 
@@ -1403,6 +1383,7 @@ ALERROR CDesignType::FireOnGlobalSystemCreated (SSystemCreateCtx &SysCreateCtx, 
 	if (FindEventHandler(ON_GLOBAL_SYSTEM_CREATED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 		Ctx.SetSystemCreateCtx(&SysCreateCtx);
 
 		//	Run code
@@ -1425,6 +1406,7 @@ void CDesignType::FireOnGlobalSystemStarted (const SEventHandlerDesc &Event, DWO
 
 	{
 	CCodeChainCtx CCCtx;
+	CCCtx.DefineContainingType(this);
 	CCCtx.DefineInteger(CONSTLIT("aElapsedTime"), dwElapsedTime);
 
 	//	Run code
@@ -1444,6 +1426,7 @@ void CDesignType::FireOnGlobalSystemStopped (const SEventHandlerDesc &Event)
 
 	{
 	CCodeChainCtx CCCtx;
+	CCCtx.DefineContainingType(this);
 
 	//	Run code
 
@@ -1466,6 +1449,7 @@ ALERROR CDesignType::FireOnGlobalTopologyCreated (CString *retsError)
 	if (FindEventHandler(ON_GLOBAL_TOPOLOGY_CREATED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 
 		//	Run code
 
@@ -1491,6 +1475,7 @@ ALERROR CDesignType::FireOnGlobalTypesInit (SDesignLoadCtx &Ctx)
 	if (FindEventHandler(evtOnGlobalTypesInit, &Event))
 		{
 		CCodeChainCtx CCCtx;
+		CCCtx.DefineContainingType(this);
 		CCCtx.SetEvent(eventOnGlobalTypesInit);
 
 		ICCItem *pResult = CCCtx.Run(Event);
@@ -1514,6 +1499,7 @@ ALERROR CDesignType::FireOnGlobalUniverseCreated (const SEventHandlerDesc &Event
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Run code
 
@@ -1535,6 +1521,8 @@ ALERROR CDesignType::FireOnGlobalUniverseLoad (const SEventHandlerDesc &Event)
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
+
 	if (g_pUniverse->InResurrectMode())
 		Ctx.DefineString(CONSTLIT("aReason"), CONSTLIT("resurrect"));
 	else
@@ -1560,6 +1548,7 @@ ALERROR CDesignType::FireOnGlobalUniverseSave (const SEventHandlerDesc &Event)
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Run code
 
@@ -1581,6 +1570,7 @@ void CDesignType::FireOnGlobalUpdate (const SEventHandlerDesc &Event)
 
 	{
 	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
 
 	//	Run code
 
@@ -1605,7 +1595,7 @@ void CDesignType::FireOnRandomEncounter (CSpaceObject *pObj)
 	if (FindEventHandler(ON_RANDOM_ENCOUNTER_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(pObj);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -1664,6 +1654,19 @@ ICCItem *CDesignType::GetEventHandler (const CString &sEvent) const
 		return Event.pCode;
 	else
 		return NULL;
+	}
+
+ICCItemPtr CDesignType::GetGlobalData (const CString &sAttrib) const
+
+//	GetGlobalData
+//
+//	Returns global data
+
+	{
+	if (m_pExtra)
+		return m_pExtra->GlobalData.GetDataAsItem(sAttrib);
+
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
 	}
 
 SEventHandlerDesc *CDesignType::GetInheritedCachedEvent (ECachedHandlers iEvent) const
@@ -2047,6 +2050,31 @@ void CDesignType::GetEventHandlers (const CEventHandler **retpHandlers, TSortMap
 	AddUniqueHandlers(retInheritedHandlers);
 	}
 
+CLanguageDataBlock CDesignType::GetMergedLanguageBlock (void) const
+
+//	GetMergedLanguageBlock
+//
+//	Returns a fully merged language block.
+//
+//	NOTE: This is used only for debugging. When looking up a language entry it
+//	is much faster to use the Translate functions.
+
+	{
+	CLanguageDataBlock Result;
+
+	if (m_pExtra)
+		Result = m_pExtra->Language;
+
+	//	Merge inherited types
+
+	if (m_pInheritFrom)
+		Result.MergeFrom(m_pInheritFrom->GetMergedLanguageBlock());
+
+	//	Done
+
+	return Result;
+	}
+
 CXMLElement *CDesignType::GetScreen (const CString &sUNID)
 
 //	GetScreen
@@ -2060,21 +2088,21 @@ CXMLElement *CDesignType::GetScreen (const CString &sUNID)
 	return Screen.GetDesc();
 	}
 
-const CString &CDesignType::GetStaticData (const CString &sAttrib) const
+ICCItemPtr CDesignType::GetStaticData (const CString &sAttrib) const
 
 //	GetStaticData
 //
 //	Returns static data
 	
 	{
-	const CString *pData;
-	if (m_pExtra && m_pExtra->StaticData.FindData(sAttrib, &pData))
-		return *pData;
+	ICCItemPtr pResult;
+	if (m_pExtra && m_pExtra->StaticData.FindDataAsItem(sAttrib, pResult))
+		return pResult;
 
 	if (m_pInheritFrom)
 		return m_pInheritFrom->GetStaticData(sAttrib);
 
-	return NULL_STR;
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
 	}
 
 CString CDesignType::GetTypeChar (DesignTypes iType)
@@ -2118,6 +2146,24 @@ bool CDesignType::HasAttribute (const CString &sAttrib) const
 		return true;
 
 	return HasSpecialAttribute(sAttrib);
+	}
+
+bool CDesignType::HasLanguageBlock (void) const
+
+//	HasLanguageBlock
+//
+//	Returns TRUE if we have any language blocks.
+
+	{
+	if (m_pExtra && !m_pExtra->Language.IsEmpty())
+		return true;
+
+	if (m_pInheritFrom && m_pInheritFrom->HasLanguageBlock())
+		return true;
+
+	//	Not found
+
+	return false;
 	}
 
 bool CDesignType::HasSpecialAttribute (const CString &sAttrib) const
@@ -2570,6 +2616,8 @@ void CDesignType::Reinit (void)
 //	Reinitializes the variant portions of the design type
 	
 	{
+	DEBUG_TRY
+
 	//	Reinit global data
 
 	if (m_pExtra)
@@ -2578,6 +2626,8 @@ void CDesignType::Reinit (void)
 	//	Allow sub-classes to reinit
 
 	OnReinit();
+
+	DEBUG_CATCH_MSG1(CONSTLIT("Crash in CDesignType::Reinit Type = %x"), GetUNID())
 	}
 
 void CDesignType::ReportEventError (const CString &sEvent, ICCItem *pError)
@@ -2681,25 +2731,20 @@ bool CDesignType::TranslateVersion2 (CSpaceObject *pObj, const CString &sID, ICC
 	if (GetVersion() > 2)
 		return false;
 
-	CString sData = GetStaticData(CONSTLIT("Language"));
-	if (!sData.IsBlank())
+	ICCItemPtr pValue = GetStaticData(CONSTLIT("Language"));
+	if (!pValue->IsNil())
 		{
 		CCodeChainCtx Ctx;
 
-		ICCItem *pData = Ctx.Link(sData, 0, NULL);
-
-		for (i = 0; i < pData->GetCount(); i++)
+		for (i = 0; i < pValue->GetCount(); i++)
 			{
-			ICCItem *pEntry = pData->GetElement(i);
+			ICCItem *pEntry = pValue->GetElement(i);
 			if (pEntry->GetCount() == 2 && strEquals(sID, pEntry->GetElement(0)->GetStringValue()))
 				{
 				*retpResult = Ctx.Run(pEntry->GetElement(1));	//	LATER:Event
-				Ctx.Discard(pData);
 				return true;
 				}
 			}
-
-		Ctx.Discard(pData);
 		}
 
 	return false;
@@ -2997,7 +3042,7 @@ IEffectPainter *CEffectCreatorRef::CreatePainter (CCreatePainterCtx &Ctx, CEffec
         //  LATER: We only handle integers for now. Later we should handle any
         //  ICCItem type.
 
-        Ctx.AddDataInteger(m_Data.GetDataAttrib(i), strToInt(m_Data.GetData(i), 0));
+        Ctx.AddDataInteger(m_Data.GetDataAttrib(i), m_Data.GetData(i)->GetIntegerValue());
         }
 
 	//	Create the painter

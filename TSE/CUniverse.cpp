@@ -123,6 +123,7 @@ CUniverse::~CUniverse (void)
 
 	m_Design.CleanUp();
 	m_Extensions.CleanUp();
+	m_Topology.DeleteAll();
 
 	//	We own m_pPlayer;
 
@@ -731,6 +732,8 @@ void CUniverse::GenerateGameStats (CGameStats &Stats)
 //	Generates the current game stats
 
 	{
+	DEBUG_TRY
+
 	int i;
 
 	//	Ask all design types to generate game stats
@@ -762,6 +765,8 @@ void CUniverse::GenerateGameStats (CGameStats &Stats)
 		Stats.Insert(CONSTLIT("Game"), CONSTLIT("Debug"));
 	else
 		Stats.Insert(CONSTLIT("Game"), CONSTLIT("Unregistered"));
+
+	DEBUG_CATCH
 	}
 
 const CDamageAdjDesc *CUniverse::GetArmorDamageAdj (int iLevel) const
@@ -1359,6 +1364,12 @@ ALERROR CUniverse::InitAdventure (IPlayerController *pPlayer, CString *retsError
 	CAdventureDesc *pAdventure = GetCurrentAdventureDesc();
 	if (pAdventure == NULL)
 		{
+		//	We don't want to free pPlayer, so we need to clear it out before we
+		//	reset.
+
+		m_pPlayer = NULL;
+		SetPlayer(NULL);
+
 		*retsError = CONSTLIT("Must have an adventure.");
 		return ERR_FAIL;
 		}
@@ -1611,6 +1622,31 @@ void CUniverse::NotifyOnObjDestroyed (SDestroyCtx &Ctx)
 	//	Fire global event
 
 	m_Design.FireOnGlobalObjDestroyed(Ctx);
+	}
+
+void CUniverse::NotifyOnPlayerEnteredGate (CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pStargate)
+
+//	NotifyOnPlayerEnteredGate
+//
+//	Called when the player ship enteres a stargate.
+
+	{
+	//	Clear out these globals so that events don't try to send us
+	//	orders (Otherwise, an event could set a target for the player. If the
+	//	target is destroyed while we are out of the system, we will
+	//	never get an OnObjDestroyed message).
+	//	Note: We need gPlayer for OnGameEnd event
+
+	GetCC().DefineGlobal(STR_G_PLAYER_SHIP, GetCC().CreateNil());
+
+	//	Mark source and destination stargates as charted.
+
+	CTopologyNode *pSourceNode = GetCurrentTopologyNode();
+	if (pSourceNode && pStargate)
+		pSourceNode->SetStargateCharted(pStargate->GetStargateID());
+
+	if (pDestNode)
+		pDestNode->SetStargateCharted(sDestEntryPoint);
 	}
 
 bool CUniverse::IsGlobalResurrectPending (CDesignType **retpType)
@@ -2611,7 +2647,7 @@ void CUniverse::SetNewSystem (CSystem *pSystem, CSpaceObject *pPOV)
 
 		//	If this is a completed non-player mission, then we delete it.
 
-		if (pMission->IsCompletedNonPlayer() || pMission->IsDestroyed())
+		if ((pMission->IsCompletedNonPlayer() && pMission->CleanNonPlayer()) || pMission->IsDestroyed())
 			{
 			m_AllMissions.Delete(i);
 			i--;

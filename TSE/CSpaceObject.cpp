@@ -4,6 +4,11 @@
 
 #include "PreComp.h"
 
+#ifdef DEBUG_ON_CREATE_TIME
+#include <stdio.h>
+static DWORD g_dwTotalTime = 0;
+#endif
+
 #define MAX_DELTA								(2.0 * g_KlicksPerPixel)
 #define MAX_DELTA2								(MAX_DELTA * MAX_DELTA)
 #define MAX_DELTA_VEL							(g_KlicksPerPixel / 2.0)
@@ -49,6 +54,7 @@ static CObjectClass<CSpaceObject>g_Class(OBJID_CSPACEOBJECT);
 #define ON_DATA_TRANSFER_EVENT                  CONSTLIT("OnDataTransfer")
 #define ON_DESELECTED_EVENT						CONSTLIT("OnDeselected")
 #define ON_DESTROY_EVENT						CONSTLIT("OnDestroy")
+#define ON_DESTROY_OBJ_EVENT					CONSTLIT("OnDestroyObj")
 #define ON_DOCK_OBJ_ADJ_EVENT					CONSTLIT("OnDockObjAdj")
 #define ON_ENTERED_GATE_EVENT					CONSTLIT("OnEnteredGate")
 #define ON_ENTERED_SYSTEM_EVENT					CONSTLIT("OnEnteredSystem")
@@ -59,6 +65,7 @@ static CObjectClass<CSpaceObject>g_Class(OBJID_CSPACEOBJECT);
 #define ON_OBJ_DOCKED_EVENT						CONSTLIT("OnObjDocked")
 #define ON_OBJ_ENTERED_GATE_EVENT				CONSTLIT("OnObjEnteredGate")
 #define ON_OBJ_GATE_EVENT						CONSTLIT("OnObjGate")
+#define ON_OBJ_GATE_CHECK_EVENT					CONSTLIT("OnObjGateCheck")
 #define ON_OBJ_JUMPED_EVENT						CONSTLIT("OnObjJumped")
 #define ON_OBJ_JUMP_POS_ADJ_EVENT				CONSTLIT("OnObjJumpPosAdj")
 #define ON_OBJ_RECONNED_EVENT					CONSTLIT("OnObjReconned")
@@ -247,7 +254,6 @@ CSpaceObject::CSpaceObject (IObjectClass *pClass) : CObject(pClass),
 		m_fNoFriendlyFire(false),
 		m_fTimeStop(false),
 		m_fPlayerTarget(false),
-		m_fAutomatedWeapon(false),
 		m_fHasOnObjDockedEvent(false),
 		m_fOnCreateCalled(false),
 		m_fNoFriendlyTarget(false),
@@ -532,6 +538,23 @@ void CSpaceObject::AddOverlay (COverlayType *pType, const CVector &vPos, int iRo
 	AddOverlay(pType, iPosAngle, iPosRadius, iRotation, iLifetime, retdwID);
 	}
 
+void CSpaceObject::AddOverlay (DWORD dwUNID, int iPosAngle, int iPosRadius, int iRotation, int iLifetime, DWORD *retdwID)
+
+//	AddOverlay
+//
+//	Adds an overly by UNID
+
+	{
+	COverlayType *pType = g_pUniverse->FindOverlayType(dwUNID);
+	if (pType == NULL)
+		{
+		if (retdwID) *retdwID = 0;
+		return;
+		}
+
+	AddOverlay(pType, iPosAngle, iPosRadius, iRotation, iLifetime, retdwID);
+	}
+
 ALERROR CSpaceObject::AddToSystem (CSystem *pSystem, bool bNoGlobalInsert)
 
 //	AddToSystem
@@ -671,6 +694,28 @@ int CSpaceObject::CalcFireSolution (CSpaceObject *pTarget, Metric rMissileSpeed)
 
 	CVector vInterceptPoint = vPos + vVel * rTimeToIntercept;
 	return VectorToPolar(vInterceptPoint);
+	}
+
+DWORD CSpaceObject::CalcSRSVisibility (SViewportPaintCtx &Ctx) const
+
+//	CalcSRSVisibility
+//
+//	Calculates the SRS opacity to paint with.
+//
+//	0 = Fully visible.
+//	1-255 = varying degrees of visibility (1 = lowest, 255 = highest).
+
+	{
+	int iRangeIndex = GetDetectionRangeIndex(Ctx.iPerception);
+	if (iRangeIndex < 6 || Ctx.pCenter == NULL || Ctx.pCenter == this)
+		return 0;
+
+	Metric rRange = CPerceptionCalc::GetRange(iRangeIndex);
+	Metric rDist = Ctx.pCenter->GetDistance(const_cast<CSpaceObject *>(this));
+	if (rDist <= rRange)
+		return 0;
+
+	return 255 - Min(254, (int)((rDist - rRange) / g_KlicksPerPixel) * 2);
 	}
 
 CSpaceObject *CSpaceObject::CalcTargetToAttack (CSpaceObject *pAttacker, CSpaceObject *pOrderGiver)
@@ -818,6 +863,7 @@ bool CSpaceObject::CanCommunicateWith (CSpaceObject *pSender)
 
 			//	Define parameters
 
+			Ctx.DefineContainingType(this);
 			Ctx.SaveAndDefineSourceVar(this);
 			Ctx.DefineSpaceObject(CONSTLIT("gSender"), pSender);
 
@@ -866,12 +912,8 @@ bool CSpaceObject::CanFireOnObjHelper (CSpaceObject *pObj)
 	{
 	return (
 		//	We cannot hit our friends (if our source can't)
-		//	(NOTE: we check for sovereign as opposed to IsEnemy because
-		//	it is faster. For our purposes, same sovereign is what we want).
-		(CanHitFriends() || GetSovereign() != pObj->GetSovereign())
-		
-		//	We cannot hit if the obj cannot be hit by friends
-		&& (pObj->CanBeHitByFriends() || GetSovereign() != pObj->GetSovereign()));
+		(CanHitFriends() && pObj->CanBeHitByFriends()) || GetSovereign() == NULL || !GetSovereign()->IsFriend(pObj->GetSovereign())
+		);
 	}
 
 bool CSpaceObject::CanInstallItem (const CItem &Item, int iSlot, InstallItemResults *retiResult, CString *retsResult, CItem *retItemToReplace)
@@ -888,6 +930,25 @@ bool CSpaceObject::CanInstallItem (const CItem &Item, int iSlot, InstallItemResu
 		*retsResult = CONSTLIT("Item installation not supported.");
 
 	return false;
+	}
+
+void CSpaceObject::ClearCondition (CConditionSet::ETypes iCondition, DWORD dwFlags)
+
+//	ClearCondition
+//
+//	Clears the given condition (generically).
+
+	{
+	switch (iCondition)
+		{
+		case CConditionSet::cndTimeStopped:
+			m_fTimeStop = false;
+			break;
+
+		default:
+			OnClearCondition(iCondition, dwFlags);
+			break;
+		}
 	}
 
 void CSpaceObject::CommsMessageFrom (CSpaceObject *pSender, int iIndex)
@@ -907,6 +968,7 @@ void CSpaceObject::CommsMessageFrom (CSpaceObject *pSender, int iIndex)
 
 		//	Define parameters
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("gSender"), pSender);
 
@@ -979,6 +1041,7 @@ void CSpaceObject::CopyDataFromObj (CSpaceObject *pSource)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -1113,7 +1176,7 @@ void CSpaceObject::CreateFromStream (SLoadCtx &Ctx, CSpaceObject **retpObj)
 	pObj->m_fNoFriendlyFire =			((dwLoad & 0x00000100) ? true : false);
 	pObj->m_fTimeStop =					((dwLoad & 0x00000200) ? true : false);
 	pObj->m_fPlayerTarget =				((dwLoad & 0x00000400) ? true : false);
-	pObj->m_fAutomatedWeapon =			((dwLoad & 0x00000800) ? true : false);
+	//	0x00000800 unused since version 158
 	pObj->m_fNoFriendlyTarget =			((dwLoad & 0x00001000) ? true : false);
 	pObj->m_fPlayerDestination =		((dwLoad & 0x00002000) ? true : false);
 	pObj->m_fShowDistanceAndBearing =	((dwLoad & 0x00004000) ? true : false);
@@ -1234,6 +1297,7 @@ ALERROR CSpaceObject::CreateRandomItems (IItemGenerator *pItems, CSystem *pSyste
 		CItemListManipulator ItemList(GetItemList());
 		SItemAddCtx Ctx(ItemList);
 		Ctx.pSystem = pSystem;
+		Ctx.pDest = this;
 		Ctx.vPos = GetPos();
 		Ctx.iLevel = (Ctx.pSystem ? Ctx.pSystem->GetLevel() : 1);
 
@@ -1431,6 +1495,7 @@ void CSpaceObject::Destroy (DestructionTypes iCause, const CDamageSource &Attack
 
 	SDestroyCtx Ctx;
 	Ctx.pObj = this;
+	Ctx.pDesc = pWeaponDesc;
 	Ctx.iCause = iCause;
 	Ctx.Attacker = Attacker;
 	Ctx.pWreck = NULL;
@@ -1457,6 +1522,9 @@ void CSpaceObject::Destroy (DestructionTypes iCause, const CDamageSource &Attack
 
 	if (pWeaponDesc)
 		pWeaponDesc->FireOnDestroyObj(Ctx);
+
+	if (Attacker.GetObj())
+		Attacker.GetObj()->FireOnDestroyObj(Ctx);
 
 	//	Remove from the object from the universal list (NOTE: We must do this
 	//	before we clear out m_pSystem.)
@@ -1517,6 +1585,17 @@ void CSpaceObject::Destroy (DestructionTypes iCause, const CDamageSource &Attack
 
 	if (m_pObjInUpdate == this)
 		m_bObjDestroyed = true;
+
+	//	If resurrection is pending, then clear the destroyed flag. Otherwise, 
+	//	wingmen might leave the player.
+	//
+	//	NOTE: This is somewhat a hack, and it works only because we remove the
+	//	player ship from lists that might contain it (including the system grid).
+	//	In the future it might be cleaner to leave the destroyed flag set but
+	//	set an additional resurrection flag and have wingmen check that.
+
+	if (Ctx.bResurrectPending && IsPlayer())
+		m_fDestroyed = false;
 
 	DEBUG_CATCH
 	}
@@ -1594,7 +1673,7 @@ EnhanceItemStatus CSpaceObject::EnhanceItem (CItemListManipulator &ItemList, con
 
 		if (iResult == eisOK 
 				&& Enhancement.IsRadiationImmune()
-				&& pArmorClass->IsRadiationImmune(CItemCtx(this, pArmor)))
+				&& pArmorClass->IsImmune(CItemCtx(this, pArmor), specialRadiation))
 			return eisAlreadyEnhanced;
 		}
 
@@ -1643,6 +1722,14 @@ void CSpaceObject::EnterGate (CTopologyNode *pDestNode, const CString &sDestEntr
 	//	Notify subscribers
 
 	m_SubscribedObjs.NotifyOnObjEnteredGate(this, pDestNode, sDestEntryPoint, pStargate);
+
+	//	If some object destroyed the player while gating
+
+	if (IsPlayer())
+		{
+		if (IsDestroyed())
+			return;
+		}
 
 	//	Tell all listeners that this object entered a stargate
 
@@ -1770,6 +1857,7 @@ bool CSpaceObject::FireCanDockAsPlayer (CSpaceObject *pDockTarget, CString *rets
 	if (FindEventHandler(CAN_DOCK_AS_PLAYER_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aDockTarget"), pDockTarget);
 
@@ -1809,9 +1897,10 @@ bool CSpaceObject::FireCanInstallItem (const CItem &Item, int iSlot, CString *re
 	if (FindEventHandler(CDesignType::evtCanInstallItem, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineItemVar(Item);
+
 		if (iSlot == -1)
 			{
 			Ctx.DefineNil(CONSTLIT("aArmorSeg"));
@@ -1872,7 +1961,7 @@ bool CSpaceObject::FireCanRemoveItem (const CItem &Item, int iSlot, CString *ret
 	if (FindEventHandler(CDesignType::evtCanRemoveItem, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineItemVar(Item);
 		if (iSlot != -1)
@@ -1918,6 +2007,7 @@ void CSpaceObject::FireCustomEvent (const CString &sEvent, ECodeChainEvents iEve
 	if (FindEventHandler(sEvent, &Event))
 		{
 		Ctx.SetEvent(iEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineDataVar(pData);
 
@@ -1985,6 +2075,7 @@ void CSpaceObject::FireCustomShipOrderEvent (const CString &sEvent, CSpaceObject
 	SEventHandlerDesc Event;
 	if (FindEventHandler(sEvent, &Event))
 		{
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
         Ctx.SaveAndDefineDataVar(NULL);
 		Ctx.DefineSpaceObject(CONSTLIT("aShipObj"), pShip);
@@ -2007,7 +2098,7 @@ void CSpaceObject::FireCustomShipOrderEvent (const CString &sEvent, CSpaceObject
 		}
 	}
 
-bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, ICCItem **retpData) const
+bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, ICCItemPtr *retpData) const
 
 //	FireGetDockScreen
 //
@@ -2015,60 +2106,25 @@ bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, IC
 
 	{
 	SEventHandlerDesc Event;
-
-	if (HasGetDockScreenEvent() 
-			&& FindEventHandler(GET_DOCK_SCREEN_EVENT, &Event))
-		{
-		CCodeChainCtx Ctx;
-		Ctx.SaveAndDefineSourceVar(const_cast<CSpaceObject *>(this));
-
-		bool bResult;
-
-		ICCItem *pResult = Ctx.Run(Event);
-
-		//	Interpret results
-
-		if (pResult->IsError())
-			{
-			ReportEventError(GET_DOCK_SCREEN_EVENT, pResult);
-			bResult = false;
-			}
-		else if (pResult->IsNil())
-			bResult = false;
-		else if (pResult->GetCount() >= 3)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retpData) *retpData = pResult->GetElement(1)->Reference();
-			if (retiPriority) *retiPriority = pResult->GetElement(2)->GetIntegerValue();
-			bResult = true;
-			}
-		else if (pResult->GetCount() >= 2)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retiPriority) *retiPriority = pResult->GetElement(1)->GetIntegerValue();
-			if (retpData) *retpData = NULL;
-			bResult = true;
-			}
-		else if (pResult->GetCount() >= 1)
-			{
-			if (retsScreen) *retsScreen = pResult->GetElement(0)->GetStringValue();
-			if (retiPriority) *retiPriority = 0;
-			if (retpData) *retpData = NULL;
-			bResult = true;
-			}
-		else
-			bResult = false;
-
-		//	Done
-
-		Ctx.Discard(pResult);
-		return bResult;
-		}
-	else
+	if (!HasGetDockScreenEvent() 
+			|| !FindEventHandler(GET_DOCK_SCREEN_EVENT, &Event))
 		return false;
+
+	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(const_cast<CSpaceObject *>(this));
+	Ctx.SaveAndDefineSourceVar(const_cast<CSpaceObject *>(this));
+
+	ICCItemPtr pResult = Ctx.RunCode(Event);
+	if (pResult->IsError())
+		{
+		ReportEventError(GET_DOCK_SCREEN_EVENT, pResult);
+		return false;
+		}
+
+	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
 	}
 
-void CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion)
+bool CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion) const
 
 //	FireGetExplosionType
 //
@@ -2080,8 +2136,8 @@ void CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion)
 	if (FindEventHandler(GET_EXPLOSION_TYPE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
-		Ctx.SaveAndDefineSourceVar(this);
+		Ctx.DefineContainingType(const_cast<CSpaceObject *>(this));
+		Ctx.SaveAndDefineSourceVar(const_cast<CSpaceObject *>(this));
 
 		ICCItem *pResult = Ctx.Run(Event);
 		if (pResult->IsError())
@@ -2136,12 +2192,16 @@ void CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion)
 		retExplosion->pDesc = (dwUNID ? g_pUniverse->FindWeaponFireDesc(strPatternSubst(CONSTLIT("%d/0"), dwUNID)) : NULL);
 		retExplosion->iBonus = iBonus;
 		retExplosion->iCause = iCause;
+
+		return (retExplosion->pDesc != NULL);
 		}
 	else
 		{
 		retExplosion->pDesc = NULL;
 		retExplosion->iBonus = 0;
 		retExplosion->iCause = killedByExplosion;
+
+		return false;
 		}
 	}
 
@@ -2161,6 +2221,7 @@ bool CSpaceObject::FireGetPlayerPriceAdj (STradeServiceCtx &ServiceCtx, ICCItem 
 		//	Set up
 
 		Ctx.SetEvent(eventGetTradePrice);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		if (ServiceCtx.pItem)
 			{
@@ -2274,7 +2335,7 @@ void CSpaceObject::FireOnAttacked (const SDamageCtx &Ctx)
 	if (FindEventHandler(ON_ATTACKED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineDamageCtx(Ctx);
 
@@ -2302,7 +2363,7 @@ void CSpaceObject::FireOnAttackedByPlayer (void)
 	if (FindEventHandler(ON_ATTACKED_BY_PLAYER_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2334,9 +2395,13 @@ void CSpaceObject::FireOnCreate (const SOnCreate &OnCreate)
 	if (!m_fOnCreateCalled 
 			&& FindEventHandler(ON_CREATE_EVENT, &Event))
 		{
+#ifdef DEBUG_ON_CREATE_TIME
+		DWORD dwStart = ::GetTickCount();
+#endif
+
 		CCodeChainCtx Ctx;
 		Ctx.SetSystemCreateCtx(OnCreate.pCreateCtx);
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineDataVar(OnCreate.pData);
 		Ctx.DefineSpaceObject(CONSTLIT("aBaseObj"), OnCreate.pBaseObj);
@@ -2349,6 +2414,11 @@ void CSpaceObject::FireOnCreate (const SOnCreate &OnCreate)
 		if (pResult->IsError())
 			ReportEventError(ON_CREATE_EVENT, pResult);
 		Ctx.Discard(pResult);
+
+#ifdef DEBUG_ON_CREATE_TIME
+		g_dwTotalTime += ::sysGetTicksElapsed(dwStart);
+		printf("[%x] OnCreate: %s (%d)\n", GetID(), (LPSTR)GetNounPhrase(), g_dwTotalTime);
+#endif
 		}
 
 	//	Remember that we already called OnCreate. This is helpful in case we
@@ -2372,7 +2442,7 @@ void CSpaceObject::FireOnCreateOrders (CSpaceObject *pBase, CSpaceObject *pTarge
 	if (FindEventHandler(ON_CREATE_ORDERS_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aBaseObj"), pBase);
 		Ctx.DefineSpaceObject(CONSTLIT("aTargetObj"), pTarget);
@@ -2396,7 +2466,7 @@ int CSpaceObject::FireOnDamage (SDamageCtx &Ctx, int iDamage)
 	if (FindEventHandler(ON_DAMAGE_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineDamageCtx(Ctx, iDamage);
 
@@ -2425,7 +2495,7 @@ void CSpaceObject::FireOnDeselected (void)
 	if (FindEventHandler(ON_DESELECTED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineInteger(CONSTLIT("aPlayer"), g_PlayerSovereignUNID);
 
@@ -2452,7 +2522,7 @@ void CSpaceObject::FireOnDestroy (const SDestroyCtx &Ctx)
 	if (FindEventHandler(ON_DESTROY_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
@@ -2470,6 +2540,33 @@ void CSpaceObject::FireOnDestroy (const SDestroyCtx &Ctx)
 	DEBUG_CATCH
 	}
 
+void CSpaceObject::FireOnDestroyObj (const SDestroyCtx &Ctx)
+
+//	FireOnDestroyObj
+//
+//	Fire OnDestroyObj event
+
+	{
+	SEventHandlerDesc Event;
+
+	if (FindEventHandler(ON_DESTROY_OBJ_EVENT, &Event))
+		{
+		CCodeChainCtx CCCtx;
+		CCCtx.DefineContainingType(this);
+		CCCtx.SaveAndDefineSourceVar(this);
+		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
+		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
+		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
+		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
+
+		ICCItem *pResult = CCCtx.Run(Event);
+		if (pResult->IsError())
+			ReportEventError(ON_DESTROY_OBJ_EVENT, pResult);
+		CCCtx.Discard(pResult);
+		}
+	}
+
 bool CSpaceObject::FireOnDockObjAdj (CSpaceObject **retpObj)
 
 //	FireOnDockObjAdj
@@ -2482,7 +2579,7 @@ bool CSpaceObject::FireOnDockObjAdj (CSpaceObject **retpObj)
 	if (FindEventHandler(ON_DOCK_OBJ_ADJ_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2526,7 +2623,7 @@ void CSpaceObject::FireOnEnteredGate (CTopologyNode *pDestNode, const CString &s
 	if (FindEventHandler(ON_ENTERED_GATE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aGateObj"), pGate);
 		Ctx.DefineString(CONSTLIT("aDestNodeID"), (pDestNode ? pDestNode->GetID() : NULL_STR));
@@ -2553,7 +2650,7 @@ void CSpaceObject::FireOnEnteredSystem (CSpaceObject *pGate)
 	if (FindEventHandler(ON_ENTERED_SYSTEM_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aGateObj"), pGate);
 
@@ -2578,7 +2675,7 @@ void CSpaceObject::FireOnLoad (SLoadCtx &Ctx)
 	if (FindEventHandler(ON_LOAD_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineInteger(CONSTLIT("aVersion"), Ctx.dwVersion);
 
@@ -2601,7 +2698,7 @@ void CSpaceObject::FireOnMining (const SDamageCtx &Ctx)
 	if (FindEventHandler(ON_MINING_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aMiner"), Ctx.Attacker.GetObj());
 		CCCtx.DefineVector(CONSTLIT("aMinePos"), Ctx.vHitPos);
@@ -2630,7 +2727,7 @@ void CSpaceObject::FireOnMissionAccepted (CMission *pMission)
 	if (FindEventHandler(ON_MISSION_ACCEPTED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aMissionObj"), pMission);
 
@@ -2653,7 +2750,7 @@ void CSpaceObject::FireOnMissionCompleted (CMission *pMission, const CString &sR
 	if (FindEventHandler(ON_MISSION_COMPLETED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aMissionObj"), pMission);
 		CCCtx.DefineString(CONSTLIT("aReason"), sReason);
@@ -2677,7 +2774,7 @@ void CSpaceObject::FireOnObjBlacklistedPlayer (CSpaceObject *pObj)
 	if (FindEventHandler(ON_OBJ_BLACKLISTED_PLAYER_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 
@@ -2700,7 +2797,7 @@ void CSpaceObject::FireOnObjDestroyed (const SDestroyCtx &Ctx)
 	if (FindEventHandler(ON_OBJ_DESTROYED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
@@ -2727,7 +2824,7 @@ void CSpaceObject::FireOnObjDocked (CSpaceObject *pObj, CSpaceObject *pDockTarge
 	if (FindEventHandler(ON_OBJ_DOCKED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObjDocked"), pObj);
 		Ctx.DefineSpaceObject(CONSTLIT("aDockTarget"), pDockTarget);
@@ -2751,7 +2848,7 @@ void CSpaceObject::FireOnObjEnteredGate (CSpaceObject *pObj, CTopologyNode *pDes
 	if (FindEventHandler(ON_OBJ_ENTERED_GATE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 		Ctx.DefineSpaceObject(CONSTLIT("aGateObj"), pStargate);
@@ -2779,7 +2876,7 @@ bool CSpaceObject::FireOnObjGate (CSpaceObject *pObj)
 	if (FindEventHandler(ON_OBJ_GATE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 
@@ -2803,6 +2900,41 @@ bool CSpaceObject::FireOnObjGate (CSpaceObject *pObj)
 	return false;
 	}
 
+bool CSpaceObject::FireOnObjGateCheck (CSpaceObject *pObj, CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pStargate)
+
+//	FireOnObjGateCheck
+//
+//	Fire OnObjGateCheck event. Returns TRUE if we allow pObj to gate through pStargate.
+
+	{
+	SEventHandlerDesc Event;
+	if (!FindEventHandler(ON_OBJ_GATE_CHECK_EVENT, &Event))
+		return true;
+
+	//	Run
+
+	CCodeChainCtx Ctx;
+	Ctx.DefineContainingType(this);
+	Ctx.SaveAndDefineSourceVar(this);
+	Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
+	Ctx.DefineSpaceObject(CONSTLIT("aGateObj"), pStargate);
+	Ctx.DefineString(CONSTLIT("aDestNodeID"), (pDestNode ? pDestNode->GetID() : NULL_STR));
+	Ctx.DefineString(CONSTLIT("aDestEntryPoint"), sDestEntryPoint);
+
+	//	Handle result
+
+	ICCItemPtr pResult = Ctx.RunCode(Event);
+	if (pResult->IsError())
+		{
+		ReportEventError(ON_OBJ_ENTERED_GATE_EVENT, pResult);
+		return false;
+		}
+	else if (pResult->IsNil())
+		return false;
+	else
+		return true;
+	}
+
 void CSpaceObject::FireOnObjJumped (CSpaceObject *pObj)
 
 //	FireOnObjJumped
@@ -2815,7 +2947,7 @@ void CSpaceObject::FireOnObjJumped (CSpaceObject *pObj)
 	if (FindEventHandler(ON_OBJ_JUMPED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 
@@ -2839,7 +2971,7 @@ bool CSpaceObject::FireOnObjJumpPosAdj (CSpaceObject *pObj, CVector *iovPos)
 	if (FindEventHandler(ON_OBJ_JUMP_POS_ADJ_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 		Ctx.DefineVector(CONSTLIT("aJumpPos"), *iovPos);
@@ -2885,7 +3017,7 @@ void CSpaceObject::FireOnObjReconned (CSpaceObject *pObj)
 	if (FindEventHandler(ON_OBJ_RECONNED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObj"), pObj);
 
@@ -2908,7 +3040,7 @@ void CSpaceObject::FireOnOrderChanged (void)
 	if (FindEventHandler(ON_ORDER_CHANGED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2930,7 +3062,7 @@ void CSpaceObject::FireOnOrdersCompleted (void)
 	if (FindEventHandler(ON_ORDERS_COMPLETED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2954,7 +3086,7 @@ void CSpaceObject::FireOnPlayerBlacklisted (void)
 	if (FindEventHandler(ON_PLAYER_BLACKLISTED_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2983,7 +3115,7 @@ void CSpaceObject::FireOnPlayerEnteredShip (CSpaceObject *pOldShip)
 	if (FindEventHandler(ON_PLAYER_ENTERED_SHIP_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
         Ctx.DefineSpaceObject(CONSTLIT("aOldShip"), pOldShip);
 
@@ -3007,7 +3139,7 @@ CSpaceObject::InterSystemResults CSpaceObject::FireOnPlayerEnteredSystem (CSpace
 	if (FindEventHandler(ON_PLAYER_ENTERED_SYSTEM_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -3037,7 +3169,7 @@ void CSpaceObject::FireOnPlayerLeftShip (CSpaceObject *pNewShip)
 	if (FindEventHandler(ON_PLAYER_LEFT_SHIP_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
         Ctx.DefineSpaceObject(CONSTLIT("aNewShip"), pNewShip);
 
@@ -3061,7 +3193,7 @@ CSpaceObject::InterSystemResults CSpaceObject::FireOnPlayerLeftSystem (CSpaceObj
 	if (FindEventHandler(ON_PLAYER_LEFT_SYSTEM_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aGateObj"), pStargate);
 		Ctx.DefineString(CONSTLIT("aDestNodeID"), (pDestNode ? pDestNode->GetID() : NULL_STR));
@@ -3092,7 +3224,7 @@ void CSpaceObject::FireOnSelected (void)
 	if (FindEventHandler(ON_SELECTED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineInteger(CONSTLIT("aPlayer"), g_PlayerSovereignUNID);
 
@@ -3119,7 +3251,7 @@ bool CSpaceObject::FireOnSubordinateAttacked (const SDamageCtx &Ctx)
 	if (bHandled = (HasOnSubordinateAttackedEvent() && FindEventHandler(ON_SUBORDINATE_ATTACKED_EVENT, &Event)))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineDamageCtx(Ctx);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjAttacked"), Ctx.pObj);
@@ -3150,7 +3282,7 @@ void CSpaceObject::FireOnSystemExplosion (CSpaceObject *pExplosion, CSpaceObject
 	if (FindEventHandler(ON_SYSTEM_EXPLOSION_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("aExplosionObj"), pSource);
 		Ctx.DefineInteger(CONSTLIT("aExplosionUNID"), dwItemUNID);
@@ -3175,7 +3307,7 @@ void CSpaceObject::FireOnSystemObjAttacked (SDamageCtx &Ctx)
 	if (FindEventHandler(CDesignType::evtOnSystemObjAttacked, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineDamageCtx(Ctx);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjAttacked"), Ctx.pObj);
@@ -3202,7 +3334,7 @@ void CSpaceObject::FireOnSystemObjDestroyed (SDestroyCtx &Ctx)
 	if (FindEventHandler(ON_SYSTEM_OBJ_DESTROYED_EVENT, &Event))
 		{
 		CCodeChainCtx CCCtx;
-
+		CCCtx.DefineContainingType(this);
 		CCCtx.SaveAndDefineSourceVar(this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
@@ -3229,7 +3361,7 @@ void CSpaceObject::FireOnSystemWeaponFire (CSpaceObject *pShot, CSpaceObject *pS
 	if (FindEventHandler(CDesignType::evtOnSystemWeaponFire, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineInteger(CONSTLIT("aFireRepeat"), iRepeatingCount);
 		Ctx.DefineSpaceObject(CONSTLIT("aShotObj"), pShot);
@@ -3259,7 +3391,7 @@ bool CSpaceObject::FireOnTranslateMessage (const CString &sMessage, CString *ret
 	if (FindEventHandler(ON_TRANSLATE_MESSAGE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineString(CONSTLIT("aMessage"), sMessage);
 
@@ -3290,7 +3422,7 @@ void CSpaceObject::FireOnUpdate (void)
 	if (FindEventHandler(CDesignType::evtOnUpdate, &Event))
 		{
 		CCodeChainCtx Ctx;
-
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -3345,6 +3477,56 @@ int CSpaceObject::GetCommsMessageCount (void)
 		return pHandler->GetCount();
 	}
 
+bool CSpaceObject::GetCondition (CConditionSet::ETypes iCondition) const
+
+//	GetCondition
+//
+//	Returns TRUE if the object is in the given condition.
+
+	{
+	//	We handle certain conditions.
+
+	switch (iCondition)
+		{
+		case CConditionSet::cndTimeStopped:
+			if (m_fTimeStop)
+				return true;
+			break;
+		}
+
+	//	See if an overlay imparts this condition
+
+	const COverlayList *pList = GetOverlays();
+	if (pList && pList->GetConditions().IsSet(iCondition))
+		return true;
+
+	//	Finally, let the sub-class handle it.
+
+	return OnGetCondition(iCondition);
+	}
+
+CConditionSet CSpaceObject::GetConditions (void) const
+
+//	GetConditions
+//
+//	Returns the set of all conditions.
+
+	{
+	int i;
+
+	CConditionSet Conditions;
+	DWORD dwFlag = 1;
+	for (i = 0; i < CConditionSet::cndCount; i++)
+		{
+		if (GetCondition((CConditionSet::ETypes)dwFlag))
+			Conditions.Set((CConditionSet::ETypes)dwFlag);
+
+		dwFlag = dwFlag << 1;
+		}
+
+	return Conditions;
+	}
+
 int CSpaceObject::GetDataInteger (const CString &sAttrib) const
 
 //	GetDataInteger
@@ -3352,14 +3534,8 @@ int CSpaceObject::GetDataInteger (const CString &sAttrib) const
 //	Get integer value
 
 	{
-	CCodeChain &CC = g_pUniverse->GetCC();
-
-	CString sData = GetData(sAttrib);
-	ICCItem *pResult = CC.Link(sData, 0, NULL);
-	int iResult = pResult->GetIntegerValue();
-	pResult->Discard(&CC);
-
-	return iResult;
+	ICCItemPtr pValue = GetData(sAttrib);
+	return pValue->GetIntegerValue();
 	}
 
 CString CSpaceObject::GetDesiredCommsKey (void) const
@@ -3414,7 +3590,7 @@ CSovereign::Disposition CSpaceObject::GetDispositionTowards (CSpaceObject *pObj)
 		return CSovereign::dispFriend;
 	}
 
-CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **retpData)
+CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItemPtr *retpData)
 
 //	GetFirstDockScreen
 //
@@ -3430,7 +3606,7 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **re
 
 	CString sScreen;
 	int iPriority;
-	ICCItem *pData = NULL;
+	ICCItemPtr pData;
 	if (!g_pUniverse->GetDesignCollection().FireGetGlobalDockScreen(this, &sScreen, &pData, &iPriority))
 		iPriority = -1;
 
@@ -3441,21 +3617,15 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **re
 		{
 		CString sOverlayScreen;
 		int iOverlayPriority;
-		ICCItem *pOverlayData;
+		ICCItemPtr pOverlayData;
 		if (pOverlays->FireGetDockScreen(this, &sOverlayScreen, &iOverlayPriority, &pOverlayData))
 			{
 			if (iOverlayPriority > iPriority)
 				{
 				sScreen = sOverlayScreen;
 				iPriority = iOverlayPriority;
-
-				if (pData)
-					pData->Discard(&CC);
-
 				pData = pOverlayData;
 				}
-			else
-				pOverlayData->Discard(&CC);
 			}
 		}
 
@@ -3463,21 +3633,15 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **re
 
 	CString sCustomScreen;
 	int iCustomPriority;
-	ICCItem *pCustomData;
+	ICCItemPtr pCustomData;
 	if (FireGetDockScreen(&sCustomScreen, &iCustomPriority, &pCustomData))
 		{
 		if (iCustomPriority > iPriority)
 			{
 			sScreen = sCustomScreen;
 			iPriority = iCustomPriority;
-
-			if (pData)
-				pData->Discard(&CC);
-
 			pData = pCustomData;
 			}
-		else
-			pCustomData->Discard(&CC);
 		}
 
 	//	If an event has overridden the dock screen, then resolve
@@ -3490,26 +3654,12 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **re
 			{
 			if (retpData)
 				*retpData = pData;
-			else
-				{
-				if (pData)
-					{
-					pData->Discard(&CC);
-					pData = NULL;
-					}
-				}
 
 			return pScreen;
 			}
 		else
 			{
 			::kernelDebugLogPattern("Unable to resolve screen: %s", sScreen);
-
-			if (pData)
-				{
-				pData->Discard(&CC);
-				pData = NULL;
-				}
 			}
 		}
 
@@ -3521,7 +3671,21 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItem **re
 	return GetDefaultDockScreen(retsScreen);
 	}
 
-void CSpaceObject::GetHitRect (CVector *retvUR, CVector *retvLL)
+ICCItemPtr CSpaceObject::GetGlobalData (const CString &sAttribute) const
+
+//	GetGlobalData
+//
+//	Returns data from the type
+
+	{
+	CDesignType *pType = GetType();
+	if (pType == NULL)
+		return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
+
+	return pType->GetGlobalData(sAttribute);
+	}
+
+void CSpaceObject::GetHitRect (CVector *retvUR, CVector *retvLL) const
 
 //	GetHitRect
 //
@@ -3572,6 +3736,20 @@ const CObjectImageArray &CSpaceObject::GetImage (void) const
 	{
 	static CObjectImageArray NullImage;
 	return NullImage;
+	}
+
+int CSpaceObject::GetImageScale (void) const
+
+//	GetImageScale
+//
+//	Returns the scale.
+
+	{
+	const CObjectImageArray &Image = GetImage();
+	if (Image.IsEmpty())
+		return 512;	//	Default
+
+	return Image.GetImageViewportSize();
 	}
 
 CItem CSpaceObject::GetItemForDevice (CInstalledDevice *pDevice)
@@ -3740,61 +3918,6 @@ int CSpaceObject::GetNearestDockPort (CSpaceObject *pRequestingObj, CVector *ret
 	return iPort;
 	}
 
-CSpaceObject *CSpaceObject::GetNearestEnemy (Metric rMaxRange, bool bIncludeStations)
-
-//	GetNearest
-//
-//	Returns the nearest enemy ship or station
-
-	{
-	DEBUG_TRY
-
-	int i;
-
-	//	Get the sovereign
-
-	CSovereign *pSovereign = GetSovereignToDefend();
-	if (pSovereign == NULL || GetSystem() == NULL)
-		return NULL;
-
-	//	Get the list of enemy objects
-
-	const CSpaceObjectList &ObjList = pSovereign->GetEnemyObjectList(GetSystem());
-
-	//	Start a max range
-
-	Metric rBestDist = rMaxRange * rMaxRange;
-	CSpaceObject *pBestObj = NULL;
-
-	//	Loop for all enemy objects
-
-	int iCount = ObjList.GetCount();
-	for (i = 0; i < iCount; i++)
-		{
-		CSpaceObject *pObj = ObjList.GetObj(i);
-
-		if ((pObj->GetCategory() == catShip
-					|| (bIncludeStations && pObj->GetCategory() == catStation))
-				&& pObj->CanAttack()
-				&& pObj != this)
-			{
-			CVector vDist = GetPos() - pObj->GetPos();
-			Metric rDist = vDist.Length2();
-
-			if (rDist < rBestDist
-					&& !pObj->IsEscortingFriendOf(this))
-				{
-				rBestDist = rDist;
-				pBestObj = pObj;
-				}
-			}
-		}
-
-	return pBestObj;
-
-	DEBUG_CATCH
-	}
-
 CSpaceObject *CSpaceObject::GetNearestEnemyStation (Metric rMaxRange)
 
 //	GetNearestEnemyStation
@@ -3910,15 +4033,9 @@ int CSpaceObject::GetNearestVisibleEnemies (int iMaxEnemies,
 
 	CPerceptionCalc Perception(GetPerception());
 
-	//	Allocate an array large enough
+	//	Allocate sorted array
 
-	struct Entry
-		{
-		CSpaceObject *pObj;
-		Metric rDist2;
-		};
-	Entry *pList = new Entry[iMaxEnemies];
-	int iCount = 0;
+	TSortMap<Metric, CSpaceObject *> Sorted;
 
 	//	If a ship has fired its weapon after this time, then it counts
 	//	as an aggressor
@@ -3950,55 +4067,49 @@ int CSpaceObject::GetNearestVisibleEnemies (int iMaxEnemies,
 					&& pObj->GetLastFireTime() > iAggressorThreshold
 					&& !pObj->IsEscortingFriendOf(this))
 				{
-				int iPos = 0;
+				//	Add the object to the list.
 
-				//	Figure out where to insert (in sorted order
-				//	by ascending distance)
+				Sorted.Insert(rDist2, pObj);
 
-				for (iPos = 0; iPos < iCount; iPos++)
-					if (rDist2 < pList[iPos].rDist2)
-						break;
+				//	If we've already got enough objects, then set a new worst 
+				//	distance.
 
-				//	If we're off the end, then don't insert
-
-				if (iPos >= iMaxEnemies)
-					continue;
-
-				//	Add the entry in sorted order
-
-				for (int j = Min(iCount - 1, iMaxEnemies - 2); j >= iPos; j--)
-					pList[j + 1] = pList[j];
-
-				pList[iPos].rDist2 = rDist2;
-				pList[iPos].pObj = pObj;
-
-				//	Increment count
-
-				if (iCount < iMaxEnemies)
-					iCount++;
-
-				//	Otherwise, we have a new worst distance, since we've filled 
-				//	the list with objects that are at least this close.
-
-				else
-					rWorstDist2 = pList[iCount-1].rDist2;
+				if (Sorted.GetCount() >= iMaxEnemies)
+					rWorstDist2 = Sorted.GetKey(Sorted.GetCount() - 1);
 				}
 			}
+		}
+
+	//	If we're angry at the player, add her to the list.
+	//	(Skip if we're an enemy of the player, since we would have added her 
+	//	above.)
+
+	CSpaceObject *pPlayer = GetPlayerShip();
+	if (pPlayer 
+			&& !IsEnemy(pPlayer)
+			&& IsAngryAt(pPlayer)
+			&& pPlayer != pExcludeObj
+			&& pPlayer->GetLastFireTime() > iAggressorThreshold
+			&& !pPlayer->IsEscortingFriendOf(this))
+		{
+		CVector vDist = GetPos() - pPlayer->GetPos();
+		Metric rDist2 = vDist.Length2();
+		if (rDist2 < rWorstDist2
+				&& Perception.CanBeTargeted(pPlayer, rDist2))
+			Sorted.Insert(rDist2, pPlayer);
 		}
 
 	//	Add each of the entries in the array to the
 	//	output
 
-	for (i = 0; i < iCount; i++)
-		pretList->Insert(pList[i].pObj);
-
-	//	Done with list
-
-	delete [] pList;
+	int iFound = Min(Sorted.GetCount(), iMaxEnemies);
+	pretList->GrowToFit(iFound);
+	for (i = 0; i < iFound; i++)
+		pretList->Insert(Sorted[i]);
 
 	//	Return the number of enemies found
 
-	return iCount;
+	return iFound;
 	}
 
 CSpaceObject *CSpaceObject::GetNearestVisibleEnemy (Metric rMaxRange, bool bIncludeStations, CSpaceObject *pExcludeObj)
@@ -4059,6 +4170,25 @@ CSpaceObject *CSpaceObject::GetNearestVisibleEnemy (Metric rMaxRange, bool bIncl
 				rBestDist2 = rDist2;
 				pBestObj = pObj;
 				}
+			}
+		}
+
+	//	If we're angry at the player, add her to the list.
+
+	CSpaceObject *pPlayer = GetPlayerShip();
+	if (pPlayer 
+			&& !IsEnemy(pPlayer) 
+			&& IsAngryAt(pPlayer)
+			&& pPlayer != pExcludeObj
+			&& !pPlayer->IsEscortingFriendOf(this))
+		{
+		CVector vDist = GetPos() - pPlayer->GetPos();
+		Metric rDist2 = vDist.Length2();
+		if (rDist2 < rBestDist2
+				&& Perception.CanBeTargeted(pPlayer, rDist2))
+			{
+			rBestDist2 = rDist2;
+			pBestObj = pPlayer;
 			}
 		}
 
@@ -4163,6 +4293,20 @@ CSpaceObject *CSpaceObject::GetOrderGiver (DestructionTypes iCause)
 		}
 	else
 		return OnGetOrderGiver();
+	}
+
+ICCItemPtr CSpaceObject::GetOverlayData (DWORD dwID, const CString &sAttrib) const
+
+//	GetOverlayData
+//
+//	Returns data for overlay
+
+	{
+	const COverlayList *pOverlays = GetOverlays();
+	if (pOverlays == NULL)
+		return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
+
+	return pOverlays->GetData(dwID, sAttrib);
 	}
 
 ICCItem *CSpaceObject::GetOverlayProperty (CCodeChainCtx *pCCCtx, DWORD dwID, const CString &sName)
@@ -4449,19 +4593,19 @@ CSovereign *CSpaceObject::GetSovereignToDefend (void) const
 		return GetSovereign();
 	}
 
-const CString &CSpaceObject::GetStaticData (const CString &sAttrib)
+ICCItemPtr CSpaceObject::GetStaticData (const CString &sAttrib)
 
 //	GetStaticData
 //
 //	Returns static data
 
 	{
-	const CString *pData;
+	ICCItemPtr pData;
 
 	//	Check our override
 
-	if (m_pOverride && m_pOverride->FindStaticData(sAttrib, &pData))
-		return *pData;
+	if (m_pOverride && m_pOverride->FindStaticData(sAttrib, pData))
+		return pData;
 
 	//	Check our type
 
@@ -4471,7 +4615,7 @@ const CString &CSpaceObject::GetStaticData (const CString &sAttrib)
 	
 	//	Not found
 
-	return NULL_STR;
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
 	}
 
 CG32bitPixel CSpaceObject::GetSymbolColor (void)
@@ -4495,6 +4639,54 @@ CG32bitPixel CSpaceObject::GetSymbolColor (void)
 		return CG32bitPixel(80, 255, 80);
 	else
 		return CG32bitPixel(0, 192, 0);
+	}
+
+const CEnhancementDesc *CSpaceObject::GetSystemEnhancements (void) const
+
+//	GetSystemEnhancements
+//
+//	Returns the list of system enhancements (or NULL if none).
+
+	{
+	CSystem *pSystem = GetSystem();
+	if (pSystem == NULL)
+		return NULL;
+
+	CSystemType *pType = pSystem->GetType();
+	if (pType == NULL)
+		return NULL;
+
+	const CEnhancementDesc &Enhancements = pType->GetItemEnhancements();
+	if (Enhancements.IsEmpty())
+		return NULL;
+
+	return &Enhancements;
+	}
+
+const CImageFilterStack *CSpaceObject::GetSystemFilters (void) const
+
+//	GetSystemFilters
+//
+//	Returns the paint filters to apply to this object.
+
+	{
+	CSystem *pSystem = GetSystem();
+	if (pSystem == NULL)
+		return NULL;
+
+	CSystemType *pType = pSystem->GetType();
+	if (pType == NULL)
+		return NULL;
+
+	if (!pType->GetImageFiltersCriteria().IsEmpty()
+			&& !MatchesCriteria(pType->GetImageFiltersCriteria()))
+		return NULL;
+
+	const CImageFilterStack *pFilters = &pType->GetImageFilters();
+	if (pFilters->IsEmpty())
+		return NULL;
+
+	return pFilters;
 	}
 
 void CSpaceObject::GetVisibleEnemies (DWORD dwFlags, TArray<CSpaceObject *> *retList, CSpaceObject *pExcludeObj)
@@ -4718,9 +4910,9 @@ bool CSpaceObject::HasSpecialAttribute (const CString &sAttrib) const
 //	base class if they do not handle the attribute.
 
 	{
-	if (strStartsWith(sAttrib, SPECIAL_DATA))
+	if (strStartsWith(sAttrib, SPECIAL_CHARACTER))
 		{
-		CString sCharacter = strSubString(sAttrib, SPECIAL_DATA.GetLength());
+		CString sCharacter = strSubString(sAttrib, SPECIAL_CHARACTER.GetLength());
 		DWORD dwUNID = (DWORD)strToInt(sCharacter, 0);
 		if (dwUNID == 0)
 			return false;
@@ -5240,15 +5432,8 @@ bool CSpaceObject::IsCommsMessageValidFrom (CSpaceObject *pSender, int iIndex, C
 	ASSERT(pHandler && iIndex < pHandler->GetCount());
 	const CCommunicationsHandler::SMessage &Msg = pHandler->GetMessage(iIndex);
 
-	//	Init name
-
-	if (retsMsg)
-		*retsMsg = Msg.sMessage;
-
-	if (retsKey)
-		*retsKey = Msg.sShortcut;
-
-	//	If we have an OnShow code block then see if it evaluates to TRUE
+	//	If we have an OnShow code block then see if it evaluates to TRUE. If not,
+	//	then we bail.
 
 	if (Msg.OnShowEvent.pCode)
 		{
@@ -5256,27 +5441,60 @@ bool CSpaceObject::IsCommsMessageValidFrom (CSpaceObject *pSender, int iIndex, C
 
 		//	Define parameters
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineSpaceObject(CONSTLIT("gSender"), pSender);
 
 		//	Execute
 
-		bool bShow;
-
-		ICCItem *pResult = Ctx.Run(Msg.OnShowEvent);
+		ICCItemPtr pResult = Ctx.RunCode(Msg.OnShowEvent);
 
 		if (pResult->IsNil())
-			bShow = false;
+			return false;
 		else if (pResult->IsError())
 			{
 			pSender->SendMessage(this, pResult->GetStringValue());
-			bShow = false;
+			return false;
+			}
+
+		//	<OnShow> returns non-Nil, so we continue.
+		}
+
+	//	If we don't have a message name then use the ID to lookup the name and
+	//	key (shortcut).
+
+	if (Msg.sMessage.IsBlank() && !Msg.sID.IsBlank())
+		{
+		CString sLabelDesc;
+		if (Translate(Msg.sID, NULL, &sLabelDesc))
+			{
+			CLanguage::ParseLabelDesc(sLabelDesc, retsMsg, retsKey);
+
+			//	If no short cut is defined, then use the one provided. [This 
+			//	should not be a common case.]
+
+			if (retsKey && retsKey->IsBlank())
+				*retsKey = Msg.sShortcut;
 			}
 		else
-			bShow = true;
+			{
+			if (retsMsg)
+				*retsMsg = Msg.sID;
 
-		Ctx.Discard(pResult);
-		return bShow;
+			if (retsKey)
+				*retsKey = Msg.sShortcut;
+			}
+		}
+
+	//	Otherwise, we expect a valid name and shortcut
+
+	else
+		{
+		if (retsMsg)
+			*retsMsg = Msg.sMessage;
+
+		if (retsKey)
+			*retsKey = Msg.sShortcut;
 		}
 
 	return true;
@@ -5424,6 +5642,8 @@ bool CSpaceObject::IsLineOfFireClear (CInstalledDevice *pWeapon,
 
 	CVector vTarget = (pTarget ? pTarget->GetPos() : vSource);
 	Metric rMaxDist2 = rDistance * rDistance;
+	bool bCheckTargetOverStation = (pTarget && pTarget->CanThrust());
+	bool bTargetIsStation = (pTarget && pTarget->GetCategory() == catStation);
 
 	//	See if any friendly object is in the line of fire
 
@@ -5444,16 +5664,27 @@ bool CSpaceObject::IsLineOfFireClear (CInstalledDevice *pWeapon,
 			{
 			CSpaceObject::Categories iCategory = pObj->GetCategory();
 
-			//	If this is an enemy and it is a ship, then it is OK 
-			//	to hit it (we only hit stations if we're aiming for them).
+			//	If this is an enemy then see if it is OK to hit them.
 
-			if (IsEnemy(pObj) && iCategory == catShip)
-				continue;
+			if (IsEnemy(pObj))
+				{
+				//	If this is another ship, then it is OK to hit.
+
+				if (iCategory == catShip)
+					continue;
+
+				//	If the target is a station, then it is OK to hit other 
+				//	stations of the same sovereign.
+
+				if (bTargetIsStation && pTarget->GetSovereign() == pObj->GetSovereign())
+					continue;
+				}
 
 			//	If the target is right on top of a station, then we
 			//	cannot fire.
 
-			if (iCategory == catStation)
+			if (iCategory == catStation
+					&& bCheckTargetOverStation)
 				{
 				//	Compute the distance of the object from us and from
 				//	the target.
@@ -5594,20 +5825,19 @@ void CSpaceObject::Jump (const CVector &vPos)
 	m_SubscribedObjs.NotifyOnObjJumped(this);
 	}
 
-bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit)
+bool CSpaceObject::MatchesCriteria (CSpaceObjectCriteria::SCtx &Ctx, const CSpaceObjectCriteria &Crit) const
 
 //	MatchesCriteria
 //
 //	Returns TRUE if this object matches the criteria
 
 	{
-	int i;
-
-	if (Crit.pSource == this)
+	CSpaceObject *pSource = Crit.GetSource();
+	if (pSource == this)
 		return false;
 
-	if (!(Crit.dwCategories & GetCategory())
-			&& (!Crit.bSelectPlayer || !IsPlayer()))
+	if (!(Crit.MatchesCategory(GetCategory()))
+			&& (!Crit.MatchesPlayer() || !IsPlayer()))
 		return false;
 
 	//	NOTE: Virtual objects always count as active. E.g., we want the virtual
@@ -5615,128 +5845,82 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 	//	[An alternative is to add !IsVirtual() to all places that look for
 	//	enemies to attack.]
 
-	if (Crit.bActiveObjectsOnly && IsInactive() && !IsVirtual())
+	if (Crit.MatchesActiveOnly() && IsInactive() && !IsVirtual())
 		return false;
 
-	if (Crit.bStargatesOnly && !IsActiveStargate())
+	if (Crit.MatchesStargatesOnly() && !IsActiveStargate())
 		return false;
 
-	if (Crit.bStructureScaleOnly 
+	if (Crit.MatchesStructureScaleOnly() 
 			&& GetCategory() == CSpaceObject::catStation
 			&& (GetScale() == scaleStar || GetScale() == scaleWorld))
 		return false;
 
-	if (Crit.bManufacturedObjectsOnly 
+	if (Crit.MatchesManufacturedOnly()
 			&& (GetScale() == scaleWorld || GetScale() == scaleStar))
 		return false;
 
-	if (Crit.bKilledObjectsOnly && (CanAttack() || IsVirtual()))
+	if (Crit.MatchesKilledOnly() && (CanAttack() || IsVirtual()))
 		return false;
 
-	CSovereign *pSovereign;
-	if (Crit.dwSovereignUNID 
-			&& (((pSovereign = GetSovereign()) == NULL) || pSovereign->GetUNID() != Crit.dwSovereignUNID))
+	if (!Crit.MatchesSovereign(GetSovereign()))
 		return false;
 
-	if (Crit.bDockedWithSource)
-		if (Crit.pSource == NULL || !Crit.pSource->IsObjDocked(this))
+	if (Crit.MatchesDockedWithSource())
+		if (pSource == NULL || !pSource->IsObjDocked(const_cast<CSpaceObject *>(this)))
 			return false;
 
-	if (Crit.bFriendlyObjectsOnly 
-			&& Crit.pSource
-			&& Crit.pSource->IsEnemy(this) 
-			&& !IsEscortingFriendOf(Crit.pSource) 
-			&& !Crit.pSource->IsEscortingFriendOf(this))
+	if (Crit.MatchesFriendlyOnly() 
+			&& pSource
+			&& pSource->IsEnemy(this) 
+			&& !IsEscortingFriendOf(pSource) 
+			&& !pSource->IsEscortingFriendOf(this))
 		return false;
 
-	if (Crit.bEnemyObjectsOnly 
-			&& Crit.pSource
-			&& (!Crit.pSource->IsEnemy(this) || IsEscortingFriendOf(Crit.pSource) || Crit.pSource->IsEscortingFriendOf(this)))
+	if (Crit.MatchesEnemyOnly() 
+			&& pSource
+			&& (!pSource->IsEnemy(this) || IsEscortingFriendOf(pSource) || pSource->IsEscortingFriendOf(this)))
 		return false;
 
-	if (Crit.bAngryObjectsOnly 
-			&& Crit.pSource
-			&& (!IsAngryAt(Crit.pSource) || IsEscortingFriendOf(Crit.pSource) || Crit.pSource->IsEscortingFriendOf(this)))
+	if (Crit.MatchesAngryOnly() 
+			&& pSource
+			&& (!IsAngryAt(pSource) || IsEscortingFriendOf(pSource) || pSource->IsEscortingFriendOf(this)))
 		return false;
 
-	if (!Crit.sStargateID.IsBlank() && !strEquals(Crit.sStargateID, GetStargateID()))
+	if (!Crit.MatchesStargate(GetStargateID()))
 		return false;
 
-	if (Crit.bHomeBaseIsSource && GetBase() != Crit.pSource)
+	if (Crit.MatchesHomeBaseIsSource() && GetBase() != pSource)
 		return false;
 
-	if (Crit.bTargetIsSource && GetTarget(CItemCtx()) != Crit.pSource)
+	if (Crit.MatchesTargetIsSource() && GetTarget(CItemCtx()) != pSource)
 		return false;
 
 	//	Check level
 
-	if (Crit.iEqualToLevel != -1 && GetLevel() != Crit.iEqualToLevel)
+	if (!Crit.MatchesLevel(GetLevel()))
 		return false;
 
-	if (Crit.iGreaterThanLevel != -1 && GetLevel() <= Crit.iGreaterThanLevel)
+	//	Check attributes
+
+	if (!Crit.MatchesAttributes(*this))
 		return false;
 
-	if (Crit.iLessThanLevel != -1 && GetLevel() >= Crit.iLessThanLevel)
+	//	Other checks
+
+	if (Crit.ExcludesPlayer() && IsPlayer())
 		return false;
 
-	//	Check required attributes
-
-	for (i = 0; i < Crit.AttribsRequired.GetCount(); i++)
-		if (!HasAttribute(Crit.AttribsRequired[i]))
-			return false;
-
-	//	Check attributes not allowed
-
-	for (i = 0; i < Crit.AttribsNotAllowed.GetCount(); i++)
-		if (HasAttribute(Crit.AttribsNotAllowed[i]))
-			return false;
-
-	//	Check special attribs required
-
-	for (i = 0; i < Crit.SpecialRequired.GetCount(); i++)
-		if (!HasSpecialAttribute(Crit.SpecialRequired[i]))
-			return false;
-
-	//	Check special attribs not allowed
-
-	for (i = 0; i < Crit.SpecialNotAllowed.GetCount(); i++)
-		if (HasSpecialAttribute(Crit.SpecialNotAllowed[i]))
-			return false;
-
-	if (Crit.bExcludePlayer && IsPlayer())
+	if (!Crit.MatchesData().IsBlank() && m_Data.IsDataNil(Crit.MatchesData()))
 		return false;
 
-	if (!Crit.sData.IsBlank() && m_Data.IsDataNil(Crit.sData))
-		return false;
-
-	if (!Crit.bIncludeVirtual && IsVirtual())
+	if (Crit.ExcludesVirtual() && IsVirtual())
 		return false;
 
 	//	With a particular order
 
-	switch (Crit.iOrder)
-		{
-		case IShipController::orderNone:
-			break;
-
-		case IShipController::orderEscort:
-			if (GetEscortPrincipal() != Crit.pSource)
-				return false;
-			break;
-
-		default:
-			{
-			IShipController::OrderTypes iOrder = IShipController::orderNone;
-			CSpaceObject *pTarget = NULL;
-
-			CShip *pShip = AsShip();
-			if (pShip && pShip->GetController())
-				iOrder = pShip->GetController()->GetCurrentOrderEx(&pTarget);
-
-			if (Crit.iOrder != iOrder || Crit.pSource != pTarget)
-				return false;
-			}
-		}
+	if (!Crit.MatchesOrder(pSource, *this))
+		return false;
 
 	//	If necessary, compute the distance and angle from the source to the obj.
 
@@ -5745,7 +5929,7 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 	Metric rObjDist2;
 	if (Ctx.bCalcPolar)
 		{
-		CVector vCenter = (Crit.pSource ? Crit.pSource->GetPos() : CVector());
+		CVector vCenter = (pSource ? pSource->GetPos() : CVector());
 		CVector vDist = GetPos() - vCenter;
 
 		iObjAngle = VectorToPolar(vDist, &rObjDist);
@@ -5753,7 +5937,7 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 		}
 	else if (Ctx.bCalcDist2)
 		{
-		CVector vCenter = (Crit.pSource ? Crit.pSource->GetPos() : CVector());
+		CVector vCenter = (pSource ? pSource->GetPos() : CVector());
 		CVector vDist = GetPos() - vCenter;
 
 		iObjAngle = 0;
@@ -5763,15 +5947,15 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 
 	//	Ranges
 
-	if (Crit.bNearerThan && rObjDist2 > Ctx.rMaxRadius2)
+	if (Crit.MatchesNearerThan() && rObjDist2 > Ctx.rMaxRadius2)
 		return false;
 
-	if (Crit.bFartherThan && rObjDist2 < Ctx.rMinRadius2)
+	if (Crit.MatchesFartherThan() && rObjDist2 < Ctx.rMinRadius2)
 		return false;
 
 	//	Visible only
 
-	if (Crit.bPerceivableOnly && rObjDist2 > GetDetectionRange2(Crit.iPerception))
+	if (Crit.MatchesPerceivableOnly() && rObjDist2 > GetDetectionRange2(Crit.MatchesPerception()))
 		return false;
 
 	//	Angle
@@ -5779,7 +5963,7 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 	//	Only bother checking if rDist > 0 (we always intersect with an
 	//	object that is 0 distance from us :).
 
-	if (Crit.iIntersectAngle != -1 && rObjDist > 0.0)
+	if (Crit.MatchesIntersectAngle() != -1 && rObjDist > 0.0)
 		{
 		//	Figure out how large the object is at this distance
 
@@ -5787,97 +5971,40 @@ bool CSpaceObject::MatchesCriteria (SCriteriaMatchCtx &Ctx, const Criteria &Crit
 		
 		//	If we do not intersect the line then we're done
 
-		if (!AreAnglesAligned(Crit.iIntersectAngle, iObjAngle, iHalfAngularSize))
+		if (!AreAnglesAligned(Crit.MatchesIntersectAngle(), iObjAngle, iHalfAngularSize))
 			return false;
 		}
 
 	//	Position checks
 
-	switch (Crit.iPosCheck)
-		{
-		case checkNone:
-			break;
-
-		case checkPosIntersect:
-			if (!PointInObject(GetPos(), Crit.vPos1))
-				return false;
-			break;
-
-		case checkLineIntersect:
-			{
-			//	Get the size of the object
-
-			CVector vObjUR;
-			CVector vObjLL;
-			GetHitRect(&vObjUR, &vObjLL);
-
-			//	Get the distance along the ray at which we intersect the given
-			//	object rectangle
-
-			Metric rObjHitFrac;
-			if (!IntersectRectAndRay(vObjUR, vObjLL, Crit.vPos1, Crit.vPos2, NULL, &rObjHitFrac))
-				return false;
-
-			//	See if we actually hit the object
-
-			CVector vLine = Crit.vPos2 - Crit.vPos1;
-			Metric rLineLen = vLine.Length();
-			if (rLineLen == 0.0)
-				return false;
-
-			CVector vRayN = vLine / rLineLen;
-			CVector vRayPixel = vRayN * g_KlicksPerPixel;
-			Metric rObjHitLen = rObjHitFrac * rLineLen;
-
-			SPointInObjectCtx Ctx;
-			PointInObjectInit(Ctx);
-
-			Metric rTestHitLen = rObjHitLen;
-			CVector vTestPos = Crit.vPos1 + (rTestHitLen * vRayN);
-			bool bHit = false;
-			while (rTestHitLen < rLineLen)
-				{
-				if (PointInObject(Ctx, GetPos(), vTestPos))
-					{
-					bHit = true;
-					break;
-					}
-
-				rTestHitLen += g_KlicksPerPixel;
-				vTestPos = vTestPos + vRayPixel;
-				}
-
-			if (!bHit)
-				return false;
-			break;
-			}
-		}
+	if (!Crit.MatchesPosition(*this))
+		return false;
 
 	//	If we're looking for the nearest or farthest, do that computation now
 
-	if (Crit.bNearestOnly)
+	if (Crit.MatchesNearestOnly())
 		{
 		if (rObjDist2 < Ctx.rBestDist2
 				&& (!IsIntangible() || IsVirtual()))
 			{
-			Ctx.pBestObj = this;
+			Ctx.pBestObj = const_cast<CSpaceObject *>(this);
 			Ctx.rBestDist2 = rObjDist2;
 			}
 		}
-	else if (Crit.bFarthestOnly)
+	else if (Crit.MatchesFarthestOnly())
 		{
 		if (rObjDist2 > Ctx.rBestDist2
 				&& (!IsIntangible() || IsVirtual()))
 			{
-			Ctx.pBestObj = this;
+			Ctx.pBestObj = const_cast<CSpaceObject *>(this);
 			Ctx.rBestDist2 = rObjDist2;
 			}
 		}
 
 	//	If we're sorting by distance, then add the object to the list
 
-	if (Crit.iSort == sortByDistance)
-		Ctx.DistSort.Insert(rObjDist2, this);
+	if (Crit.GetSort() == CSpaceObjectCriteria::sortByDistance)
+		Ctx.DistSort.Insert(rObjDist2, const_cast<CSpaceObject *>(this));
 
 	return true;
 	}
@@ -5921,16 +6048,11 @@ bool CSpaceObject::MissileCanHitObj (CSpaceObject *pObj, CDamageSource &Source, 
 				&& pDesc->CanHit(pObj)
 
 				//	We cannot hit our friends (if our source can't)
-				//	(NOTE: we check for sovereign as opposed to IsEnemy because
-				//	it is faster. For our purposes, same sovereign is what we want).
-				&& ((CanHitFriends() && Source.CanHitFriends()) || Source.GetSovereign() != pObj->GetSovereign())
+				&& ((CanHitFriends() && Source.CanHitFriends() && pObj->CanBeHitByFriends()) || !Source.IsFriend(pObj->GetSovereign()))
 
 				//	If our source is the player, then we cannot hit player wingmen
 
-				&& Source.CanHit(pObj)
-				
-				//	We cannot hit if the object cannot be hit by friends
-				&& (pObj->CanBeHitByFriends() || Source.GetSovereign() != pObj->GetSovereign()));
+				&& Source.CanHit(pObj));
 		}
 
 	//	If we don't have a source...
@@ -6045,6 +6167,16 @@ void CSpaceObject::NotifyOnObjDocked (CSpaceObject *pDockTarget)
 	m_SubscribedObjs.NotifyOnObjDocked(this, pDockTarget);
 	}
 
+bool CSpaceObject::NotifyOnObjGateCheck (CSpaceObject *pGatingObj, CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pGateObj)
+
+//	NotifyOnObjGateCheck
+//
+//	Notify subscribers OnObjGateCheck
+
+	{
+	return m_SubscribedObjs.NotifyOnObjGateCheck(pGatingObj, pDestNode, sDestEntryPoint, pGateObj);
+	}
+
 bool CSpaceObject::ObjRequestDock (CSpaceObject *pObj, int iPort)
 
 //	ObjRequestDock
@@ -6112,6 +6244,36 @@ void CSpaceObject::OnObjDestroyed (const SDestroyCtx &Ctx)
 	//	Remove the object if it had a subscription to us
 
 	m_SubscribedObjs.Delete(Ctx.pObj);
+	}
+
+void CSpaceObject::SetCondition (CConditionSet::ETypes iCondition, int iTimer)
+
+//	SetCondition
+//
+//	Sets the given condition (generically).
+
+	{
+	switch (iCondition)
+		{
+		case CConditionSet::cndTimeStopped:
+			m_fTimeStop = true;
+			break;
+
+		default:
+			OnSetCondition(iCondition, iTimer);
+			break;
+		}
+	}
+
+void CSpaceObject::SetConditionDueToDamage (SDamageCtx &DamageCtx, CConditionSet::ETypes iCondition)
+
+//	SetConditionDueToDamage
+//
+//	The given damage has imparted the given condition. NOTE: The caller is 
+//	responsible for checking to see if the object is immune or not.
+
+	{
+	OnSetConditionDueToDamage(DamageCtx, iCondition);
 	}
 
 void CSpaceObject::Paint (CG32bitImage &Dest, int x, int y, SViewportPaintCtx &Ctx)
@@ -6454,391 +6616,6 @@ void CSpaceObject::PaintTargetHighlight (CG32bitImage &Dest, int x, int y, SView
 	CPaintHelper::PaintTargetHighlight(Dest, x, y, iTick, iRadius, iRingSpacing, 3, rgbColor);
 	}
 
-void CSpaceObject::ParseCriteria (CSpaceObject *pSource, const CString &sCriteria, Criteria *retCriteria)
-
-//	ParseCriteria
-//
-//	Parses a string and returns criteria structure
-//
-//		b			Include beams
-//		k			Include markers
-//		m			Include missiles
-//		s			Include ships
-//		t			Include stations (including planets)
-//		z			Include the player
-//
-//		A			Active objects only (i.e., objects that can attack)
-//		B:xyz;		Only objects with attribute 'xyz'
-//		C			(unused)
-//		D:xyz;		Only objects with data 'xyz'
-//		E			Enemy objects only
-//		F			Friendly objects only
-//		G			Stargates only
-//		G:xyz;		Stargate with ID 'xyz'
-//		H			Only objects whose base = source
-//		I:angle		Only objects that intersect line from source
-//		J			Same sovereign as source
-//		J:unid;		Sovereign unid = unid
-//		K			Killed objects only (i.e., objects that cannot attack)
-//		L:x-y;		Objects of level x to y.
-//		M			Manufactured objects only (i.e., no planets or asteroids)
-//		N			Return only the nearest object to the source
-//		N:nn;		Return only objects within nn light-seconds
-//		O:docked;	Ships that are currently docked at source
-//		O:escort;	Ships ordered to escort source
-//		O:guard;	Ships ordered to guard source
-//		P			Only objects that can be detected (perceived) by source
-//		Q			(unused)
-//		R			Return only the farthest object to the source
-//		R:nn;		Return only objects greater than nn light-seconds away
-//		S:sort		Sort order ('d' = distance ascending; 'D' = distance descending
-//		T			Include structure-scale stations
-//		T:xyz;		Include stations with attribute 'xyz'
-//		U			(unused)
-//		V			Include virtual objects
-//		W			(unused)
-//		X			Only objects whose target is the source
-//		Y			Enemy/angry objects only
-//		Z			Exclude the player
-//
-//		+xyz;		Include objects with the given attribute
-//		-xyz;		Exclude objects with the given attribute
-//
-//		=n			Level comparisons
-
-	{
-	CString sParam;
-
-	//	Initialize
-
-	retCriteria->pSource = pSource;
-	retCriteria->dwCategories = 0;
-	retCriteria->bSelectPlayer = false;
-	retCriteria->bIncludeVirtual = false;
-	retCriteria->bActiveObjectsOnly = false;
-	retCriteria->bKilledObjectsOnly = false;
-	retCriteria->bFriendlyObjectsOnly = false;
-	retCriteria->bEnemyObjectsOnly = false;
-	retCriteria->bAngryObjectsOnly = false;
-	retCriteria->bManufacturedObjectsOnly = false;
-	retCriteria->bStructureScaleOnly = false;
-	retCriteria->bStargatesOnly = false;
-	retCriteria->bNearestOnly = false;
-	retCriteria->bFarthestOnly = false;
-	retCriteria->bNearerThan = false;
-	retCriteria->bFartherThan = false;
-	retCriteria->bHomeBaseIsSource = false;
-	retCriteria->bDockedWithSource = false;
-	retCriteria->bExcludePlayer = false;
-	retCriteria->bTargetIsSource = false;
-	retCriteria->bPerceivableOnly = false;
-	retCriteria->bSourceSovereignOnly = false;
-	retCriteria->dwSovereignUNID = 0;
-	retCriteria->rMinRadius = 0.0;
-	retCriteria->rMaxRadius = g_InfiniteDistance;
-	retCriteria->iIntersectAngle = -1;
-	retCriteria->iOrder = IShipController::orderNone;
-	retCriteria->iEqualToLevel = -1;
-	retCriteria->iGreaterThanLevel = -1;
-	retCriteria->iLessThanLevel = -1;
-	retCriteria->iPosCheck = checkNone;
-	retCriteria->iSort = sortNone;
-	retCriteria->iSortOrder = AscendingSort;
-
-	//	Parse
-
-	char *pPos = sCriteria.GetPointer();
-	while (*pPos != '\0')
-		{
-		switch (*pPos)
-			{
-			case '*':
-				retCriteria->dwCategories = 0xffffffff;
-				break;
-
-			case 'A':
-				retCriteria->bActiveObjectsOnly = true;
-				break;
-
-			case 'B':
-				{
-				CString sAttrib = ParseCriteriaParam(&pPos);
-				if (!sAttrib.IsBlank())
-					retCriteria->AttribsRequired.Insert(sAttrib);
-				break;
-				}
-
-			case 'b':
-				retCriteria->dwCategories |= catBeam;
-				break;
-
-			case 'D':
-				retCriteria->sData = ParseCriteriaParam(&pPos);
-				break;
-
-			case 'E':
-				retCriteria->bEnemyObjectsOnly = true;
-				break;
-
-			case 'F':
-				retCriteria->bFriendlyObjectsOnly = true;
-				break;
-
-			case 'G':
-				retCriteria->dwCategories |= CSpaceObject::catStation;
-				retCriteria->sStargateID = ParseCriteriaParam(&pPos);
-				retCriteria->bStargatesOnly = true;
-				break;
-
-			case 'H':
-				retCriteria->bHomeBaseIsSource = true;
-				break;
-
-			case 'I':
-				retCriteria->iIntersectAngle = strToInt(ParseCriteriaParam(&pPos), -1);
-				break;
-
-			case 'J':
-				sParam = ParseCriteriaParam(&pPos);
-				if (!sParam.IsBlank())
-					retCriteria->dwSovereignUNID = strToInt(sParam, 0);
-				else
-					{
-					retCriteria->bSourceSovereignOnly = true;
-					retCriteria->dwSovereignUNID = (pSource && pSource->GetSovereign() ? pSource->GetSovereign()->GetUNID() : 0);
-					}
-				break;
-
-			case 'K':
-				retCriteria->bKilledObjectsOnly = true;
-				break;
-
-			case 'k':
-				retCriteria->dwCategories |= catMarker;
-				break;
-
-			case 'L':
-				{
-				CString sParam = ParseCriteriaParam(&pPos);
-				char *pParamPos = sParam.GetASCIIZPointer();
-
-				//	Parse the first number
-
-				int iLow = strParseInt(pParamPos, -1, &pParamPos);
-
-				//	If we don't have a second number, then we just want items
-				//	of the given level.
-
-				if (*pParamPos != '-')
-					{
-					if (iLow != -1)
-						retCriteria->iEqualToLevel = iLow;
-					}
-
-				//	Otherwise, we parse a second number
-
-				else
-					{
-					pParamPos++;
-					int iHi = strParseInt(pParamPos, -1, &pParamPos);
-
-					if (iLow == -1)
-						iLow = 1;
-					if (iHi == -1)
-						iHi = MAX_OBJECT_LEVEL;
-
-					retCriteria->iGreaterThanLevel = iLow - 1;
-					retCriteria->iLessThanLevel = iHi + 1;
-					}
-
-				break;
-				}
-
-			case 'M':
-				retCriteria->bManufacturedObjectsOnly = true;
-				break;
-
-			case 'm':
-				retCriteria->dwCategories |= catMissile;
-				break;
-
-			case 'N':
-				sParam = ParseCriteriaParam(&pPos);
-				if (sParam.IsBlank())
-					retCriteria->bNearestOnly = true;
-				else
-					{
-					retCriteria->bNearerThan = true;
-					retCriteria->rMaxRadius = LIGHT_SECOND * strToInt(sParam, 0, NULL);
-					}
-				break;
-
-			case 'O':
-				{
-				CString sAttrib = ParseCriteriaParam(&pPos);
-				if (strEquals(sAttrib, ORDER_DOCKED))
-					retCriteria->bDockedWithSource = true;
-				else
-					{
-					retCriteria->iOrder = ::GetOrderType(sAttrib);
-					if (retCriteria->iOrder == IShipController::orderNone)
-						::kernelDebugLogPattern("Invalid sysFindObject order: %s", sAttrib);
-					}
-				break;
-				}
-
-			case 'P':
-				retCriteria->bPerceivableOnly = true;
-				retCriteria->iPerception = (pSource ? pSource->GetPerception() : 0);
-				break;
-
-			case 'R':
-				sParam = ParseCriteriaParam(&pPos);
-				if (sParam.IsBlank())
-					retCriteria->bFarthestOnly = true;
-				else
-					{
-					retCriteria->bFartherThan = true;
-					retCriteria->rMinRadius = LIGHT_SECOND * strToInt(sParam, 0, NULL);
-					}
-				break;
-
-			case 's':
-				retCriteria->dwCategories |= CSpaceObject::catShip;
-				break;
-
-			case 'S':
-				{
-				sParam = ParseCriteriaParam(&pPos);
-				char *pSort = sParam.GetASCIIZPointer();
-				if (*pSort == 'd')
-					{
-					retCriteria->iSort = sortByDistance;
-					retCriteria->iSortOrder = AscendingSort;
-					}
-				else if (*pSort == 'D')
-					{
-					retCriteria->iSort = sortByDistance;
-					retCriteria->iSortOrder = DescendingSort;
-					}
-				break;
-				}
-
-			case 't':
-				{
-				retCriteria->dwCategories |= CSpaceObject::catStation;
-
-				CString sAttrib = ParseCriteriaParam(&pPos);
-				if (!sAttrib.IsBlank())
-					retCriteria->AttribsRequired.Insert(sAttrib);
-				break;
-				}
-
-			case 'T':
-				{
-				retCriteria->dwCategories |= CSpaceObject::catStation;
-
-				CString sAttrib = ParseCriteriaParam(&pPos);
-				if (!sAttrib.IsBlank())
-					retCriteria->AttribsRequired.Insert(sAttrib);
-
-				retCriteria->bStructureScaleOnly = true;
-				break;
-				}
-
-			case 'V':
-				retCriteria->bIncludeVirtual = true;
-				break;
-
-			case 'X':
-				retCriteria->bTargetIsSource = true;
-				break;
-
-			case 'Y':
-				retCriteria->bAngryObjectsOnly = true;
-				break;
-
-			case 'z':
-				retCriteria->bSelectPlayer = true;
-				break;
-
-			case 'Z':
-				retCriteria->bExcludePlayer = true;
-				break;
-
-			case '+':
-			case '-':
-				{
-				bool bRequired = (*pPos == '+');
-				bool bBinaryParam;
-				CString sParam = ParseCriteriaParam(&pPos, false, &bBinaryParam);
-
-				if (!sParam.IsBlank())
-					{
-					if (bRequired)
-						{
-						if (bBinaryParam)
-							retCriteria->SpecialRequired.Insert(sParam);
-						else
-							retCriteria->AttribsRequired.Insert(sParam);
-						}
-					else
-						{
-						if (bBinaryParam)
-							retCriteria->SpecialNotAllowed.Insert(sParam);
-						else
-							retCriteria->AttribsNotAllowed.Insert(sParam);
-						}
-					}
-				break;
-				}
-
-			case '>':
-			case '<':
-			case '=':
-				{
-				char chChar = *pPos;
-				pPos++;
-
-				//	<= or >=
-
-				int iEqualAdj;
-				if (*pPos == '=')
-					{
-					pPos++;
-					iEqualAdj = 1;
-					}
-				else
-					iEqualAdj = 0;
-
-				//	Get the number
-
-				char *pNewPos;
-				int iValue = strParseInt(pPos, 0, &pNewPos);
-
-				//	Back up one because we will increment at the bottom
-				//	of the loop.
-
-				if (pPos != pNewPos)
-					pPos = pNewPos - 1;
-
-				//	Levels
-
-				if (chChar == '=')
-					retCriteria->iEqualToLevel = iValue;
-				else if (chChar == '>')
-					retCriteria->iGreaterThanLevel = iValue - iEqualAdj;
-				else if (chChar == '<')
-					retCriteria->iLessThanLevel = iValue + iEqualAdj;
-
-				break;
-				}
-			}
-
-		pPos++;
-		}
-	}
-
 void CSpaceObject::Reconned (void)
 
 //	Reconned
@@ -7099,27 +6876,6 @@ void CSpaceObject::ScrapeOverlays (void)
 	pOverlays->ScrapeHarmfulOverlays(this);
 	}
 
-void CSpaceObject::SetCriteriaSource (Criteria &Crit, CSpaceObject *pSource)
-
-//	SetCriteriaSource
-//
-//	Assuming the criteria was been properly parsed, this function sets
-//	the source for the criteria.
-//
-//	This is useful when we need to parse the criteria in two passes.
-
-	{
-	ASSERT(pSource);
-
-	Crit.pSource = pSource;
-
-	if (Crit.bSourceSovereignOnly)
-		Crit.dwSovereignUNID = (pSource->GetSovereign() ? pSource->GetSovereign()->GetUNID() : 0);
-
-	if (Crit.bPerceivableOnly)
-		Crit.iPerception = pSource->GetPerception();
-	}
-
 void CSpaceObject::SetCursorAtArmor (CItemListManipulator &ItemList, CInstalledArmor *pArmor)
 
 //	SetCursorAtArmor
@@ -7222,12 +6978,8 @@ void CSpaceObject::SetDataInteger (const CString &sAttrib, int iValue)
 
 	{
 	CCodeChain &CC = g_pUniverse->GetCC();
-
-	ICCItem *pValue = CC.CreateInteger(iValue);
-	CString sData = CC.Unlink(pValue);
-	pValue->Discard(&CC);
-
-	SetData(sAttrib, sData);
+	ICCItemPtr pValue = ICCItemPtr(CC.CreateInteger(iValue));
+	SetData(sAttrib, pValue);
 	}
 
 void CSpaceObject::SetEventFlags (void)
@@ -7246,6 +6998,20 @@ void CSpaceObject::SetEventFlags (void)
 	//	Let subclasses do their bit
 
 	OnSetEventFlags();
+	}
+
+void CSpaceObject::SetGlobalData (const CString &sAttribute, ICCItem *pData)
+
+//	SetGlobalData
+//
+//	Sets data for the type
+
+	{
+	CDesignType *pType = GetType();
+	if (pType == NULL)
+		return;
+
+	pType->SetGlobalData(sAttribute, pData);
 	}
 
 bool CSpaceObject::SetItemProperty (const CItem &Item, const CString &sName, ICCItem *pValue, int iCount, CItem *retItem, CString *retsError)
@@ -7433,6 +7199,7 @@ void CSpaceObject::SetOverride (CDesignType *pOverride)
 			{
 			CCodeChainCtx Ctx;
 
+			Ctx.DefineContainingType(this);
 			Ctx.SaveAndDefineSourceVar(this);
 
 			ICCItem *pResult = Ctx.Run(Event);
@@ -7456,6 +7223,7 @@ void CSpaceObject::SetOverride (CDesignType *pOverride)
 			{
 			CCodeChainCtx Ctx;
 
+			Ctx.DefineContainingType(this);
 			Ctx.SaveAndDefineSourceVar(this);
 
 			ICCItem *pResult = Ctx.Run(Event);
@@ -7554,7 +7322,12 @@ bool CSpaceObject::Translate (const CString &sID, ICCItem *pData, CString *retsT
 //	Translate a message by ID.
 
 	{
-	//	First we ask the type
+	//	Ask the override
+
+	if (m_pOverride && m_pOverride->TranslateText(this, sID, pData, retsText))
+		return true;
+
+	//	Then the type
 
 	CDesignType *pType = GetType();
 	if (pType && pType->TranslateText(this, sID, pData, retsText))
@@ -7594,7 +7367,77 @@ void CSpaceObject::Update (SUpdateCtx &Ctx)
 	{
 	SetInUpdateCode();
 
-	//	Update the highlight
+	//	Update as long as we are not time-stopped.
+
+	if (!Ctx.IsTimeStopped())
+		{
+		//	Update effects
+
+		if (m_pFirstEffect)
+			UpdateEffects();
+
+		//	Update items
+
+		if (IsDestinyTime(ITEM_ON_UPDATE_CYCLE, ITEM_ON_UPDATE_OFFSET))
+			{
+			FireItemOnUpdate();
+
+			//	We could have gotten destroyed here.
+
+			if (IsDestroyed())
+				{
+				ClearInUpdateCode();
+				return;
+				}
+			}
+
+		//	Update object
+
+		CDesignType *pType;
+		if (FindEventHandler(CDesignType::evtOnUpdate)
+				&& IsDestinyTime(OBJECT_ON_UPDATE_CYCLE, OBJECT_ON_UPDATE_OFFSET)
+				&& (pType = GetType())
+				//	Skip missiles, because we can't tell the difference between OnUpdate
+				//	for the item and OnUpdate for the missile object.
+				&& pType->GetType() != designItemType
+				&& pType->GetAPIVersion() >= 31)
+			{
+			FireOnUpdate();
+
+			//	We could have gotten destroyed here, so we check and leave if 
+			//	necessary.
+
+			if (IsDestroyed())
+				{
+				ClearInUpdateCode();
+				return;
+				}
+			}
+
+		//	Update the specific object subclass.
+
+		OnUpdate(Ctx, g_SecondsPerUpdate);
+		if (IsDestroyed())
+			{
+			ClearInUpdateCode();
+			return;
+			}
+		}
+
+	//	Otherwise, if we're time-stopped we need to update any overlays that
+	//	cause time stop (so that they can expire properly).
+
+	else
+		{
+		COverlayList *pOverlays = GetOverlays();
+		if (pOverlays)
+			pOverlays->UpdateTimeStopped(this, GetImageScale(), GetRotation());
+		}
+
+	//	Now update some variables that are only used by the player but relate
+	//	to this object.
+	//
+	//	NOTE: These should update even if we're time-stopped.
 
 	if (m_iHighlightCountdown > 0)
 		{
@@ -7602,52 +7445,14 @@ void CSpaceObject::Update (SUpdateCtx &Ctx)
 			m_sHighlightText = NULL_STR;
 		}
 
-	//	Update effects
-
-	if (m_pFirstEffect)
-		UpdateEffects();
-
-	//	Update items
-
-	if (IsDestinyTime(ITEM_ON_UPDATE_CYCLE, ITEM_ON_UPDATE_OFFSET))
-		{
-		FireItemOnUpdate();
-
-		//	We could have gotten destroyed here.
-
-		if (IsDestroyed())
-			{
-			ClearInUpdateCode();
-			return;
-			}
-		}
-
-	//	Update object
-
-	CDesignType *pType;
-	if (FindEventHandler(CDesignType::evtOnUpdate)
-			&& IsDestinyTime(OBJECT_ON_UPDATE_CYCLE, OBJECT_ON_UPDATE_OFFSET)
-			&& (pType = GetType())
-			&& pType->GetAPIVersion() >= 31)
-		{
-		FireOnUpdate();
-
-		//	We could have gotten destroyed here, so we check and leave if 
-		//	necessary.
-
-		if (IsDestroyed())
-			{
-			ClearInUpdateCode();
-			return;
-			}
-		}
-
 	//	See if this is the nearest player target
 
 	if (Ctx.pPlayer
 			&& !Ctx.pPlayer->IsDestroyed()
 			&& this != Ctx.pPlayer)
+		{
 		UpdatePlayerTarget(Ctx);
+		}
 
 	//	See if we have a dock screen. We only check every 20 ticks or so, so this
 	//	information might be stale. Use this for the docking ports animation, but
@@ -7660,10 +7465,6 @@ void CSpaceObject::Update (SUpdateCtx &Ctx)
 		{
 		m_fHasDockScreenMaybe = (CanObjRequestDock(Ctx.pPlayer) == dockingOK);
 		}
-
-	//	Update the specific object subclass.
-
-	OnUpdate(Ctx, g_SecondsPerUpdate);
 
 	//	Done
 
@@ -7879,6 +7680,7 @@ void CSpaceObject::UseItem (CItem &Item, CString *retsError)
 		{
 		//	Define parameters
 
+		Ctx.DefineContainingType(Item);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineItemVar(Item);
 		Ctx.SetScreensRoot(Item.GetType());
@@ -7975,7 +7777,7 @@ void CSpaceObject::WriteToStream (IWriteStream *pStream)
 	dwSave |= (m_fNoFriendlyFire			? 0x00000100 : 0);
 	dwSave |= (m_fTimeStop					? 0x00000200 : 0);
 	dwSave |= (m_fPlayerTarget				? 0x00000400 : 0);
-	dwSave |= (m_fAutomatedWeapon			? 0x00000800 : 0);
+	//	0x00000800 unused
 	dwSave |= (m_fNoFriendlyTarget			? 0x00001000 : 0);
 	dwSave |= (m_fPlayerDestination			? 0x00002000 : 0);
 	dwSave |= (m_fShowDistanceAndBearing	? 0x00004000 : 0);
@@ -8089,28 +7891,4 @@ void CSpaceObject::PaintDebugVector (CG32bitImage &Dest, int x, int y, SViewport
 	}
 
 #endif
-
-//	SCriteriaMatchCtx ----------------------------------------------------------
-
-CSpaceObject::SCriteriaMatchCtx::SCriteriaMatchCtx (const Criteria &Crit) :
-		DistSort(Crit.iSortOrder)
-
-//	SCriteriaMatchCtx constructor
-
-	{
-	pBestObj = NULL;
-	rBestDist2 = (Crit.bNearestOnly ? g_InfiniteDistance * g_InfiniteDistance : 0.0);
-
-	bCalcPolar = (Crit.iIntersectAngle != -1);
-	bCalcDist2 = (!bCalcPolar 
-			&& (Crit.bNearestOnly 
-				|| Crit.bFarthestOnly 
-				|| Crit.bNearerThan 
-				|| Crit.bFartherThan 
-				|| Crit.bPerceivableOnly
-				|| Crit.iSort == CSpaceObject::sortByDistance));
-
-	rMinRadius2 = Crit.rMinRadius * Crit.rMinRadius;
-	rMaxRadius2 = Crit.rMaxRadius * Crit.rMaxRadius;
-	}
 

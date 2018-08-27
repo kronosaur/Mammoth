@@ -233,7 +233,8 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 
 		//	See if we reflect
 
-		if (Ctx.bReflect = (mathRandom(1, 100) <= iChance))
+		Ctx.SetShotReflected(mathRandom(1, 100) <= iChance);
+		if (Ctx.IsShotReflected())
 			{
 			Ctx.iOriginalAbsorb = Ctx.iAbsorb;
 			Ctx.iOriginalShieldDamage = Ctx.iShieldDamage;
@@ -242,13 +243,13 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 			}
 		}
 	else
-		Ctx.bReflect = false;
+		Ctx.SetShotReflected(false);
 
 	//	If this damage is a shield penetrator, then we either penetrate the 
 	//	shields, or reflect.
 
 	int iPenetrateAdj = Ctx.Damage.GetShieldPenetratorAdj();
-	if (iPenetrateAdj > 0 && !Ctx.bReflect)
+	if (iPenetrateAdj > 0 && !Ctx.IsShotReflected())
 		{
 		//	We compare the HP of damage done to the shields vs. the HP left
 		//	on the shields. Bigger values means greater chance of penetrating.
@@ -283,12 +284,24 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 
 		else
 			{
-			Ctx.bReflect = true;
+			Ctx.SetShotReflected(true);
 			Ctx.iOriginalAbsorb = Ctx.iAbsorb;
 			Ctx.iOriginalShieldDamage = Ctx.iShieldDamage;
 			Ctx.iAbsorb = Ctx.iDamage;
 			Ctx.iShieldDamage = 0;
 			}
+		}
+
+	//	If we have time stop damage, then there is a chance that the shields 
+	//	will prevent it.
+	//
+	//	The chance of negating time stop damage depends on the difference in 
+	//	levels.
+
+	if (Ctx.IsTimeStopped()
+			&& mathRandom(1, 100) <= Ctx.Damage.GetTimeStopResistChance(GetLevel()))
+		{
+		Ctx.SetTimeStopped(false);
 		}
 
 	//	Give custom damage a chance to react. These events can modify the
@@ -309,7 +322,7 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 
 	//	If we reflect, then create the reflection
 
-	if (Ctx.bReflect)
+	if (Ctx.IsShotReflected())
 		{
 		int iDirection;
 
@@ -317,7 +330,7 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 
 		CSpaceObject *pTarget;
 		if (m_fAimReflection
-				&& (pTarget = pShip->GetNearestEnemy(MAX_REFLECTION_TARGET))
+				&& (pTarget = pShip->GetNearestVisibleEnemy(MAX_REFLECTION_TARGET))
 				&& (iDirection = pShip->CalcFireSolution(pTarget, Ctx.pCause->GetMaxSpeed())) != -1)
 			{
 			//	iDirection is set
@@ -335,7 +348,7 @@ bool CShieldClass::AbsorbDamage (CInstalledDevice *pDevice, CSpaceObject *pShip,
 
 	//	Create shield effect
 
-	if ((Ctx.iAbsorb || Ctx.bReflect)
+	if ((Ctx.iAbsorb || Ctx.IsShotReflected())
 			&& m_pHitEffect
 			&& !Ctx.bNoHitEffect)
 		{
@@ -920,6 +933,7 @@ int CShieldClass::FireGetMaxHP (CInstalledDevice *pDevice, CSpaceObject *pSource
 
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(GetItemType());
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(pSource->GetItemForDevice(pDevice));
 		Ctx.DefineInteger(CONSTLIT("aMaxHP"), iMaxHP);
@@ -949,6 +963,7 @@ void CShieldClass::FireOnShieldDamage (CItemCtx &ItemCtx, SDamageCtx &Ctx)
 		//	Setup arguments
 
 		CCodeChainCtx CCCtx;
+		CCCtx.DefineContainingType(GetItemType());
 		CCCtx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 		CCCtx.SaveAndDefineItemVar(ItemCtx);
 		CCCtx.DefineDamageCtx(Ctx);
@@ -956,7 +971,7 @@ void CShieldClass::FireOnShieldDamage (CItemCtx &ItemCtx, SDamageCtx &Ctx)
 		CCCtx.DefineInteger(CONSTLIT("aShieldHP"), Ctx.iHPLeft);
 		CCCtx.DefineInteger(CONSTLIT("aShieldDamageHP"), Ctx.iShieldDamage);
 		CCCtx.DefineInteger(CONSTLIT("aArmorDamageHP"), Ctx.iDamage - Ctx.iAbsorb);
-		if (Ctx.bReflect)
+		if (Ctx.IsShotReflected())
 			{
 			CCCtx.DefineString(CONSTLIT("aShieldReflect"), STR_SHIELD_REFLECT);
 			CCCtx.DefineInteger(CONSTLIT("aOriginalShieldDamageHP"), Ctx.iOriginalShieldDamage);
@@ -991,16 +1006,16 @@ void CShieldClass::FireOnShieldDamage (CItemCtx &ItemCtx, SDamageCtx &Ctx)
 				{
 				if (strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT))
 					{
-					Ctx.bReflect = true;
+					Ctx.SetShotReflected(true);
 					Ctx.iAbsorb = Ctx.iDamage;
 					Ctx.iShieldDamage = 0;
 					}
 				else
 					{
 					Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(0)->GetIntegerValue(), Ctx.iHPLeft));
-					if (Ctx.bReflect)
+					if (Ctx.IsShotReflected())
 						{
-						Ctx.bReflect = false;
+						Ctx.SetShotReflected(false);
 						Ctx.iAbsorb = Ctx.iOriginalAbsorb;
 						}
 					}
@@ -1010,7 +1025,7 @@ void CShieldClass::FireOnShieldDamage (CItemCtx &ItemCtx, SDamageCtx &Ctx)
 
 			else if (pResult->GetCount() == 2)
 				{
-				Ctx.bReflect = false;
+				Ctx.SetShotReflected(false);
 				Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(0)->GetIntegerValue(), Ctx.iHPLeft));
 				Ctx.iAbsorb = Max(0, Ctx.iDamage - Max(0, pResult->GetElement(1)->GetIntegerValue()));
 				}
@@ -1019,7 +1034,7 @@ void CShieldClass::FireOnShieldDamage (CItemCtx &ItemCtx, SDamageCtx &Ctx)
 
 			else
 				{
-				Ctx.bReflect = strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT);
+				Ctx.SetShotReflected(strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT));
 				Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(1)->GetIntegerValue(), Ctx.iHPLeft));
 				Ctx.iAbsorb = Max(0, Ctx.iDamage - Max(0, pResult->GetElement(2)->GetIntegerValue()));
 				}
@@ -1041,6 +1056,7 @@ void CShieldClass::FireOnShieldDown (CInstalledDevice *pDevice, CSpaceObject *pS
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(GetItemType());
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(pSource->GetItemForDevice(pDevice));
 
@@ -1574,7 +1590,7 @@ void CShieldClass::Recharge (CInstalledDevice *pDevice, CShip *pShip, int iStatu
 
 	int iMaxHP = GetMaxHP(Ctx);
 	int iHPLeft = GetHPLeft(Ctx);
-	SetHPLeft(pDevice, pShip, Min(iMaxHP, iHPLeft + iStatus));
+	SetHPLeft(pDevice, pShip, Max(0, Min(iMaxHP, iHPLeft + iStatus)));
 	pShip->OnComponentChanged(comShields);
 	}
 
@@ -1634,10 +1650,11 @@ void CShieldClass::SetHPLeft (CInstalledDevice *pDevice, CSpaceObject *pSource, 
 //	Sets HP left on shields
 
 	{
+	CItemCtx Ctx(pSource, pDevice);
 	if (bConsumeCharges 
 			&& m_fHasNonRegenHPBonus 
-			&& iHP < pDevice->GetCharges(pSource))
-		pDevice->SetCharges(pSource, iHP);
+			&& iHP < GetMaxHP(Ctx))
+		pDevice->SetCharges(pSource, Max(0, iHP - (GetMaxHP(Ctx) - pDevice->GetCharges(pSource))));
 		
 	pDevice->SetData((DWORD)iHP);
 	}
@@ -1813,8 +1830,9 @@ void CShieldClass::Update (CInstalledDevice *pDevice, CSpaceObject *pSource, SDe
 				//	re-enable a device.
 
 				if (m_fHasNonRegenHPBonus
-						&& iHPLeft + iRegenHP < pDevice->GetCharges(pSource))
-					iRegenHP = pDevice->GetCharges(pSource) - iHPLeft;
+						&& iHPLeft + iRegenHP < iMaxHP
+						&& pDevice->GetCharges(pSource) > 0)
+					iRegenHP = iMaxHP - iHPLeft;
 
 				//	Regen
 

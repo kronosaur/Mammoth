@@ -29,6 +29,16 @@ enum ItemCategories
 	itemcatCount =			13,				//	Total count
 	};
 
+enum ItemFates
+	{
+	fateNone,							//	Default handling when object is destroyed
+
+	fateSurvives,						//	Item always survives
+	fateDamaged,						//	Item is always damaged
+	fateDestroyed,						//	Item is always destroyed
+	fateComponetized,					//	Item is always reduced to components
+	};
+
 struct CItemCriteria
 	{
 	CItemCriteria (void);
@@ -98,6 +108,12 @@ struct SDisplayAttribute
 			iType(attribNeutral)
 		{ }
 
+	SDisplayAttribute (EDisplayAttributeTypes iTypeCons, const CString &sTextCons, const CString &sIDCons) :
+			iType(iTypeCons),
+			sText(sTextCons),
+			sID(sIDCons)
+		{ }
+
 	SDisplayAttribute (EDisplayAttributeTypes iTypeCons, const CString &sTextCons, bool bDueToEnhancement = false) :
 			iType(iTypeCons),
 			sText(sTextCons)
@@ -133,6 +149,7 @@ struct SDisplayAttribute
 
 	EDisplayAttributeTypes iType;
 	CString sText;
+	CString sID;
 
 	RECT rcRect;					//	Reserved for callers
 	};

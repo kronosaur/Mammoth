@@ -29,6 +29,7 @@
 #define EXHAUST_DRAG_ATTRIB						CONSTLIT("drag")
 #define EFFECT_ATTRIB							CONSTLIT("effect")
 #define EXPANSION_SPEED_ATTRIB					CONSTLIT("expansionSpeed")
+#define EXPLOSION_TYPE_ATTRIB					CONSTLIT("explosionType")
 #define FAILSAFE_ATTRIB							CONSTLIT("failsafe")
 #define FIRE_EFFECT_ATTRIB						CONSTLIT("fireEffect")
 #define FIRE_RATE_ATTRIB						CONSTLIT("fireRate")
@@ -65,6 +66,7 @@
 #define PASSTHROUGH_ATTRIB						CONSTLIT("passthrough")
 #define RELATIVISTIC_SPEED_ATTRIB				CONSTLIT("relativisticSpeed")
 #define BEAM_CONTINUOUS_ATTRIB					CONSTLIT("repeating")
+#define CONTINUOUS_FIRE_DELAY_ATTRIB			CONSTLIT("repeatingDelay")
 #define SOUND_ATTRIB							CONSTLIT("sound")
 #define SPEED_ATTRIB							CONSTLIT("speed")
 #define STEALTH_ATTRIB							CONSTLIT("stealth")
@@ -166,6 +168,7 @@ void CWeaponFireDesc::AddTypesUsed (TSortMap<DWORD, bool> *retTypesUsed)
 	retTypesUsed->SetAt(m_pEffect.GetUNID(), true);
 	retTypesUsed->SetAt(m_pHitEffect.GetUNID(), true);
 	retTypesUsed->SetAt(m_pFireEffect.GetUNID(), true);
+	retTypesUsed->SetAt(m_pExplosionType.GetUNID(), true);
 
 	if (m_pParticleDesc)
 		m_pParticleDesc->AddTypesUsed(retTypesUsed);
@@ -236,7 +239,7 @@ Metric CWeaponFireDesc::CalcMaxEffectiveRange (void) const
 		if (m_iManeuverability > 0)
 			rEffectiveLifetime = Ticks2Seconds(iMaxLifetime) * 0.75;
 		else
-			rEffectiveLifetime = Min(Ticks2Seconds(iMaxLifetime), 100.0);
+			rEffectiveLifetime = Min(Ticks2Seconds(iMaxLifetime), 200.0);
 
 		Metric rSpeed = (m_rMissileSpeed + m_rMaxMissileSpeed) / 2;
 		rRange = rSpeed * rEffectiveLifetime;
@@ -311,7 +314,7 @@ bool CWeaponFireDesc::CanHit (CSpaceObject *pObj) const
 	return true;
 	}
 
-IEffectPainter *CWeaponFireDesc::CreateEffectPainter (bool bTrackingObj, bool bUseObjectCenter)
+IEffectPainter *CWeaponFireDesc::CreateEffectPainter (SShotCreateCtx &CreateCtx)
 
 //	CreateEffectPainter
 //
@@ -321,16 +324,27 @@ IEffectPainter *CWeaponFireDesc::CreateEffectPainter (bool bTrackingObj, bool bU
 //	NOTE: We may return NULL if the weapon has no effect.
 
 	{
-	CCreatePainterCtx Ctx;
-	Ctx.SetWeaponFireDesc(this);
-	Ctx.SetTrackingObject(bTrackingObj);
-	Ctx.SetUseObjectCenter(bUseObjectCenter);
+	CCreatePainterCtx PainterCtx;
+	PainterCtx.SetWeaponFireDesc(this);
+	PainterCtx.SetTrackingObject(CreateCtx.pTarget && IsTracking());
+	PainterCtx.SetUseObjectCenter(true);
+
+	//	If this is an explosion, then we pass the source as an anchor.
+
+	CSpaceObject *pAnchor;
+	if ((CreateCtx.dwFlags | SShotCreateCtx::CWF_EXPLOSION)
+			&& (pAnchor = CreateCtx.Source.GetObj()))
+		{
+		PainterCtx.SetAnchor(pAnchor);
+		}
 
 	//	We set the default lifetime of the effect to whatever the descriptor defines.
 
-	Ctx.SetDefaultParam(LIFETIME_ATTRIB, CEffectParamDesc(m_Lifetime.GetMaxValue()));
+	PainterCtx.SetDefaultParam(LIFETIME_ATTRIB, CEffectParamDesc(m_Lifetime.GetMaxValue()));
 
-	return m_pEffect.CreatePainter(Ctx);
+	//	Create the painter
+
+	return m_pEffect.CreatePainter(PainterCtx);
 	}
 
 void CWeaponFireDesc::CreateFireEffect (CSystem *pSystem, CSpaceObject *pSource, const CVector &vPos, const CVector &vVel, int iDir)
@@ -799,9 +813,12 @@ CWeaponFireDesc *CWeaponFireDesc::FindWeaponFireDescFromFullUNID (const CString 
 
 			//	Get the ordinal
 
-			ASSERT(*pPos == '/');
-			pPos++;
-			int iOrdinal = strParseInt(pPos, 0, &pPos);
+			int iOrdinal = 0;
+			if (*pPos == '/')
+				{
+				pPos++;
+				iOrdinal = strParseInt(pPos, 0, &pPos);
+				}
 
             //  Convert the ordinal to an ammo type
 
@@ -874,6 +891,7 @@ void CWeaponFireDesc::FireOnCreateShot (const CDamageSource &Source, CSpaceObjec
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(pShot);
 		CCCtx.DefineSpaceObject(CONSTLIT("aTargetObj"), pTarget);
 		CCCtx.DefineSpaceObject(CONSTLIT("aAttacker"), Source.GetObj());
@@ -902,6 +920,7 @@ bool CWeaponFireDesc::FireOnDamageAbandoned (SDamageCtx &Ctx)
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(Ctx.pObj);
 		CCCtx.DefineDamageCtx(Ctx);
 
@@ -945,6 +964,7 @@ bool CWeaponFireDesc::FireOnDamageArmor (SDamageCtx &Ctx)
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(Ctx.pObj);
 		CCCtx.DefineDamageCtx(Ctx);
 
@@ -988,6 +1008,7 @@ bool CWeaponFireDesc::FireOnDamageOverlay (SDamageCtx &Ctx, COverlay *pOverlay)
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(Ctx.pObj);
 		CCCtx.DefineDamageCtx(Ctx);
 		CCCtx.DefineInteger(CONSTLIT("aOverlayID"), pOverlay->GetID());
@@ -1037,6 +1058,7 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 		if (pShip)
 			pShip->SetCursorAtDevice(ItemList, iDevice);
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(Ctx.pObj);
 		CCCtx.DefineDamageCtx(Ctx);
 		CCCtx.DefineInteger(CONSTLIT("aDevice"), iDevice);
@@ -1045,7 +1067,7 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 		CCCtx.DefineInteger(CONSTLIT("aShieldHP"), Ctx.iHPLeft);
 		CCCtx.DefineInteger(CONSTLIT("aShieldDamageHP"), Ctx.iShieldDamage);
 		CCCtx.DefineInteger(CONSTLIT("aArmorDamageHP"), Ctx.iDamage - Ctx.iAbsorb);
-		if (Ctx.bReflect)
+		if (Ctx.IsShotReflected())
 			{
 			CCCtx.DefineString(CONSTLIT("aShieldReflect"), STR_SHIELD_REFLECT);
 			CCCtx.DefineInteger(CONSTLIT("aOriginalShieldDamageHP"), Ctx.iOriginalShieldDamage);
@@ -1084,16 +1106,16 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 				{
 				if (strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT))
 					{
-					Ctx.bReflect = true;
+					Ctx.SetShotReflected(true);
 					Ctx.iAbsorb = Ctx.iDamage;
 					Ctx.iShieldDamage = 0;
 					}
 				else
 					{
 					Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(0)->GetIntegerValue(), Ctx.iHPLeft));
-					if (Ctx.bReflect)
+					if (Ctx.IsShotReflected())
 						{
-						Ctx.bReflect = false;
+						Ctx.SetShotReflected(false);
 						Ctx.iAbsorb = Ctx.iOriginalAbsorb;
 						}
 					}
@@ -1103,7 +1125,7 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 
 			else if (pResult->GetCount() == 2)
 				{
-				Ctx.bReflect = false;
+				Ctx.SetShotReflected(false);
 				Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(0)->GetIntegerValue(), Ctx.iHPLeft));
 				Ctx.iAbsorb = Max(0, Ctx.iDamage - Max(0, pResult->GetElement(1)->GetIntegerValue()));
 				}
@@ -1112,7 +1134,7 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 
 			else
 				{
-				Ctx.bReflect = strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT);
+				Ctx.SetShotReflected(strEquals(pResult->GetElement(0)->GetStringValue(), STR_SHIELD_REFLECT));
 				Ctx.iShieldDamage = Max(0, Min(pResult->GetElement(1)->GetIntegerValue(), Ctx.iHPLeft));
 				Ctx.iAbsorb = Max(0, Ctx.iDamage - Max(0, pResult->GetElement(2)->GetIntegerValue()));
 				}
@@ -1126,7 +1148,7 @@ bool CWeaponFireDesc::FireOnDamageShields (SDamageCtx &Ctx, int iDevice)
 
 		else if (strEquals(pResult->GetStringValue(), STR_SHIELD_REFLECT))
 			{
-			Ctx.bReflect = true;
+			Ctx.SetShotReflected(true);
 			Ctx.iAbsorb = Ctx.iDamage;
 			Ctx.iShieldDamage = 0;
 			bResult = false;
@@ -1162,6 +1184,7 @@ void CWeaponFireDesc::FireOnDestroyObj (const SDestroyCtx &Ctx)
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
@@ -1194,6 +1217,7 @@ void CWeaponFireDesc::FireOnDestroyShot (CSpaceObject *pShot)
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(pShot);
 		CCCtx.DefineItemType(CONSTLIT("aWeaponType"), GetWeaponType());
 		CCCtx.DefineSpaceObject(CONSTLIT("aAttacker"), pShot->GetDamageSource().GetObj());
@@ -1222,6 +1246,7 @@ bool CWeaponFireDesc::FireOnFragment (const CDamageSource &Source, CSpaceObject 
 
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(GetWeaponType());
 		CCCtx.SaveAndDefineSourceVar(pShot);
 		CCCtx.DefineSpaceObject(CONSTLIT("aNearestObj"), pNearestObj);
 		CCCtx.DefineSpaceObject(CONSTLIT("aTargetObj"), pTarget);
@@ -1607,6 +1632,7 @@ void CWeaponFireDesc::InitFromDamage (const DamageDesc &Damage)
 	m_pAmmoType = NULL;
 
 	m_iContinuous = 0;
+	m_iContinuousFireDelay = 0;
 	m_iPassthrough = 0;
 	m_iFireRate = -1;
 
@@ -2033,6 +2059,8 @@ ALERROR CWeaponFireDesc::InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, c
 	//	Load continuous and passthrough
 
 	m_iContinuous = pDesc->GetAttributeInteger(BEAM_CONTINUOUS_ATTRIB);
+	m_iContinuousFireDelay = pDesc->GetAttributeIntegerBounded(CONTINUOUS_FIRE_DELAY_ATTRIB, 1, -1, 0);
+
 	if (pDesc->FindAttributeInteger(PASSTHROUGH_ATTRIB, &m_iPassthrough))
 		{
 		//	In previous versions passthrough was a boolean value, so for backwards
@@ -2155,6 +2183,11 @@ ALERROR CWeaponFireDesc::InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, c
 			pDesc->GetAttribute(FIRE_EFFECT_ATTRIB)))
 		return error;
 
+	//	Explosion
+
+	if (error = m_pExplosionType.LoadUNID(Ctx, pDesc->GetAttribute(EXPLOSION_TYPE_ATTRIB)))
+		return error;
+
 	//	Vapor trail
 
     int iVaporTrailWidth;
@@ -2263,6 +2296,7 @@ ALERROR CWeaponFireDesc::InitScaledStats (SDesignLoadCtx &Ctx, CXMLElement *pDes
     m_pAmmoType = Src.m_pAmmoType;
     m_iFireType = Src.m_iFireType;
     m_iContinuous = Src.m_iContinuous;
+	m_iContinuousFireDelay = Src.m_iContinuousFireDelay;
 	m_iFireRate = Src.m_iFireRate;
 
 	m_fRelativisticSpeed = Src.m_fRelativisticSpeed;
@@ -2309,6 +2343,7 @@ ALERROR CWeaponFireDesc::InitScaledStats (SDesignLoadCtx &Ctx, CXMLElement *pDes
     m_pFireEffect = Src.m_pFireEffect;
     m_FireSound = Src.m_FireSound;
     m_pOldEffects = (Src.m_pOldEffects ? new SOldEffects(*Src.m_pOldEffects) : NULL);
+	m_pExplosionType = Src.m_pExplosionType;
 
     m_Events = Src.m_Events;
 
@@ -2389,6 +2424,9 @@ void CWeaponFireDesc::MarkImages (void)
 	if (m_pFireEffect)
 		m_pFireEffect->MarkImages();
 
+	if (m_pExplosionType)
+		m_pExplosionType->MarkImages();
+
 	m_FireSound.Mark();
 
 	SFragmentDesc *pFragment = m_pFirstFragment;
@@ -2441,6 +2479,9 @@ ALERROR CWeaponFireDesc::OnDesignLoadComplete (SDesignLoadCtx &Ctx)
 	if (m_pParticleDesc)
 		if (error = m_pParticleDesc->Bind(Ctx))
 			return error;
+
+	if (error = m_pExplosionType.Bind(Ctx))
+		return error;
 
 	//	Fragment
 

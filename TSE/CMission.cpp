@@ -15,11 +15,7 @@ static CObjectClass<CMission>g_MissionClass(OBJID_CMISSION, NULL);
 #define EVENT_ON_STARTED						CONSTLIT("OnStarted")
 
 #define PROPERTY_ACCEPTED_ON					CONSTLIT("acceptedOn")
-#define PROPERTY_CAN_BE_DECLINED				CONSTLIT("canBeDeclined")
-#define PROPERTY_CAN_BE_DELETED					CONSTLIT("canBeDeleted")
 #define PROPERTY_DEBRIEFER_ID					CONSTLIT("debrieferID")
-#define PROPERTY_FORCE_UNDOCK_AFTER_DEBRIEF		CONSTLIT("forceUndockAfterDebrief")
-#define PROPERTY_HAS_DEBRIEF					CONSTLIT("hasDebrief")
 #define PROPERTY_IS_ACTIVE						CONSTLIT("isActive")
 #define PROPERTY_IS_COMPLETED					CONSTLIT("isCompleted")
 #define PROPERTY_IS_DEBRIEFED					CONSTLIT("isDebriefed")
@@ -33,7 +29,6 @@ static CObjectClass<CMission>g_MissionClass(OBJID_CMISSION, NULL);
 #define PROPERTY_NAME							CONSTLIT("name")
 #define PROPERTY_NODE_ID						CONSTLIT("nodeID")
 #define PROPERTY_OWNER_ID						CONSTLIT("ownerID")
-#define PROPERTY_PRIORITY						CONSTLIT("priority")
 #define PROPERTY_SUMMARY						CONSTLIT("summary")
 #define PROPERTY_UNID							CONSTLIT("unid")
 
@@ -278,6 +273,10 @@ ALERROR CMission::Create (CMissionType *pType,
 	if (pOwner && !pOwner->FindEventSubscriber(pMission))
 		pOwner->AddEventSubscriber(pMission);
 
+	//	Mission created
+
+	pMission->m_pType->OnMissionCreated();
+
 	//	Done
 
 	if (retpMission)
@@ -300,6 +299,7 @@ void CMission::FireCustomEvent (const CString &sEvent, ICCItem *pData)
 		CCodeChainCtx Ctx;
 
 		Ctx.SetEvent(eventDoEvent);
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineDataVar(pData);
 
@@ -323,6 +323,7 @@ void CMission::FireOnAccepted (void)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -348,6 +349,7 @@ ICCItem *CMission::FireOnDeclined (void)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -379,6 +381,7 @@ ICCItem *CMission::FireOnReward (ICCItem *pData)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineDataVar(pData);
 
@@ -409,6 +412,7 @@ void CMission::FireOnSetPlayerTarget (const CString &sReason)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.DefineString(STR_A_REASON, sReason);
 
@@ -432,6 +436,7 @@ void CMission::FireOnStart (void)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -454,6 +459,7 @@ void CMission::FireOnStop (const CString &sReason, ICCItem *pData)
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(this);
 		Ctx.SaveAndDefineDataVar(pData);
 		Ctx.DefineString(STR_A_REASON, sReason);
@@ -477,12 +483,6 @@ ICCItem *CMission::GetProperty (CCodeChainCtx &Ctx, const CString &sName)
 	if (strEquals(sName, PROPERTY_ACCEPTED_ON))
 		return (m_fAcceptedByPlayer ? CC.CreateInteger(m_dwAcceptedOn) : CC.CreateNil());
 
-	else if (strEquals(sName, PROPERTY_CAN_BE_DECLINED))
-		return CC.CreateBool(m_pType->CanBeDeclined());
-
-	else if (strEquals(sName, PROPERTY_CAN_BE_DELETED))
-		return CC.CreateBool(m_pType->CanBeDeleted());
-
 	else if (strEquals(sName, PROPERTY_DEBRIEFER_ID))
 		{
 		if (m_pDebriefer.GetID() != OBJID_NULL)
@@ -492,12 +492,6 @@ ICCItem *CMission::GetProperty (CCodeChainCtx &Ctx, const CString &sName)
 		else
 			return CC.CreateNil();
 		}
-
-	else if (strEquals(sName, PROPERTY_FORCE_UNDOCK_AFTER_DEBRIEF))
-		return CC.CreateBool(m_pType->ForceUndockAfterDebrief());
-
-	else if (strEquals(sName, PROPERTY_HAS_DEBRIEF))
-		return CC.CreateBool(m_pType->HasDebrief());
 
 	else if (strEquals(sName, PROPERTY_IS_ACTIVE))
 		return CC.CreateBool(IsActive());
@@ -543,14 +537,8 @@ ICCItem *CMission::GetProperty (CCodeChainCtx &Ctx, const CString &sName)
 			return CC.CreateInteger(m_pOwner.GetID());
 		}
 
-	else if (strEquals(sName, PROPERTY_PRIORITY))
-		return CC.CreateInteger(m_pType->GetPriority());
-
 	else if (strEquals(sName, PROPERTY_SUMMARY))
 		return CC.CreateString(m_sInstructions);
-
-	else if (strEquals(sName, PROPERTY_UNID))
-		return CC.CreateInteger(m_pType->GetUNID());
 
 	else
 		return CSpaceObject::GetProperty(Ctx, sName);
@@ -671,6 +659,10 @@ void CMission::OnDestroyed (SDestroyCtx &Ctx)
 
 	if (m_fInOnCreate)
 		return;
+
+	//	Mission destroyed
+
+	m_pType->OnMissionDestroyed();
 
 	//	If the mission is running then we need to stop
 

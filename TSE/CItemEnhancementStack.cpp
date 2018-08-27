@@ -14,6 +14,8 @@ void CItemEnhancementStack::AccumulateAttributes (CItemCtx &Ctx, TArray<SDisplay
 	{
 	int i;
 
+	CDeviceClass *pClass = Ctx.GetDeviceClass();
+
 	//	Add all damage resistance enhancements
 
 	bool bNoDamageAdj = false;
@@ -84,9 +86,14 @@ void CItemEnhancementStack::AccumulateAttributes (CItemCtx &Ctx, TArray<SDisplay
 
 	int iBonus = GetBonus();
 	if (iBonus < 0)
-		retList->Insert(SDisplayAttribute(attribNegative, strPatternSubst(CONSTLIT("-%d%%"), iBonus), true));
+		retList->Insert(SDisplayAttribute(attribNegative, strPatternSubst(CONSTLIT("%d%%"), iBonus), true));
 	else if (iBonus > 0)
 		retList->Insert(SDisplayAttribute(attribPositive, strPatternSubst(CONSTLIT("+%d%%"), iBonus), true));
+
+	//	Add tracking
+
+	if (IsTracking() && pClass && !pClass->IsTrackingWeapon(CItemCtx()))
+		retList->Insert(SDisplayAttribute(attribPositive, CONSTLIT("+tracking"), true));
 	}
 
 int CItemEnhancementStack::ApplyDamageAdj (const DamageDesc &Damage, int iDamageAdj) const
@@ -313,6 +320,23 @@ int CItemEnhancementStack::GetDamageAdj (const DamageDesc &Damage) const
 		return CDamageAdjDesc::MAX_DAMAGE_ADJ;
 
 	return (int)(rValue + 0.5);
+	}
+
+int CItemEnhancementStack::GetManeuverRate (void) const
+
+//	GetManeuverRate
+//
+//	Returns the tracking maneuver rate.
+
+	{
+	int i;
+
+	int iRate = 0;
+
+	for (i = 0; i < m_Stack.GetCount(); i++)
+		iRate = Max(iRate, m_Stack[i].GetManeuverRate());
+
+	return iRate;
 	}
 
 int CItemEnhancementStack::GetPowerAdj (void) const

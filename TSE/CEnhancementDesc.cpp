@@ -12,7 +12,7 @@
 #define LEVEL_CHECK_ATTRIB						CONSTLIT("levelCheck")
 #define TYPE_ATTRIB								CONSTLIT("type")
 
-bool CEnhancementDesc::Accumulate (CItemCtx &Ctx, const CItem &Target, TArray<CString> &EnhancementIDs, CItemEnhancementStack *pEnhancements) const
+bool CEnhancementDesc::Accumulate (int iLevel, const CItem &Target, TArray<CString> &EnhancementIDs, CItemEnhancementStack *pEnhancements) const
 
 //	Accumulate
 //
@@ -38,7 +38,7 @@ bool CEnhancementDesc::Accumulate (CItemCtx &Ctx, const CItem &Target, TArray<CS
 		//	If we're checking level, then make sure our level is at least as 
 		//	high as the target.
 
-		if (!m_Enhancements[i].LevelCheck.MatchesCriteria(Ctx.GetItem().GetLevel(), Target))
+		if (!m_Enhancements[i].LevelCheck.MatchesCriteria(iLevel, Target))
 			continue;
 
 		//	Add the enhancement
@@ -53,6 +53,16 @@ bool CEnhancementDesc::Accumulate (CItemCtx &Ctx, const CItem &Target, TArray<CS
 		}
 
 	return bEnhanced;
+	}
+
+bool CEnhancementDesc::Accumulate (CItemCtx &Ctx, const CItem &Target, TArray<CString> &EnhancementIDs, CItemEnhancementStack *pEnhancements) const
+
+//	Accumulate
+//
+//	Adds enhancements to the stack. Returns TRUE if any enhancements were added.
+
+	{
+	return Accumulate(Ctx.GetItem().GetLevel(), Target, EnhancementIDs, pEnhancements);
 	}
 
 ALERROR CEnhancementDesc::InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
@@ -119,6 +129,18 @@ ALERROR CEnhancementDesc::InitFromEnhanceXML (SDesignLoadCtx &Ctx, CXMLElement *
 	return NOERROR;
 	}
 
+void CEnhancementDesc::InsertHPBonus (int iBonus)
+
+//	InsertHPBonus
+//
+//	Adds a standard HP bonus enhancement.
+
+	{
+	SEnhancerDesc *pEnhance = m_Enhancements.Insert();
+	CItem::InitCriteriaAll(&pEnhance->Criteria);
+	pEnhance->Enhancement.SetModBonus(iBonus);
+	}
+
 void CEnhancementDesc::SetCriteria (int iEntry, const CItemCriteria &Criteria)
 
 //	SetCriteria
@@ -174,4 +196,65 @@ void CEnhancementDesc::SetType (int iEntry, const CString &sType)
 		}
 	else if (iEntry >= 0 && iEntry < m_Enhancements.GetCount())
 		m_Enhancements[iEntry].sType = sType;
+	}
+
+void CEnhancementDesc::ReadFromStream (SLoadCtx &Ctx)
+
+//	ReadFromStream
+//
+//	DWORD				Count of SEnhancerDesc
+//
+//	CString				sType
+//	CString				Criteria
+//	CItemLevelCriteria	LevelCheck
+//	CItemEnhancement	Enhancement
+
+	{
+	int i;
+	DWORD dwLoad;
+
+	Ctx.pStream->Read(dwLoad);
+	m_Enhancements.DeleteAll();
+	m_Enhancements.InsertEmpty(dwLoad);
+
+	for (i = 0; i < m_Enhancements.GetCount(); i++)
+		{
+		SEnhancerDesc &Enhancer = m_Enhancements[i];
+
+		Ctx.pStream->Read(Enhancer.sType);
+
+		CString sCriteria;
+		Ctx.pStream->Read(sCriteria);
+		CItem::ParseCriteria(sCriteria, &Enhancer.Criteria);
+		Enhancer.LevelCheck.ReadFromStream(Ctx);
+		Enhancer.Enhancement.ReadFromStream(Ctx);
+		}
+	}
+
+void CEnhancementDesc::WriteToStream (IWriteStream &Stream) const
+
+//	WriteToStream
+//
+//	DWORD				Count of SEnhancerDesc
+//
+//	CString				sType
+//	CString				Criteria
+//	CItemLevelCriteria	LevelCheck
+//	CItemEnhancement	Enhancement
+
+	{
+	int i;
+
+	DWORD dwSave = m_Enhancements.GetCount();
+	Stream.Write(dwSave);
+
+	for (i = 0; i < m_Enhancements.GetCount(); i++)
+		{
+		const SEnhancerDesc &Enhancer = m_Enhancements[i];
+
+		Stream.Write(Enhancer.sType);
+		Stream.Write(CItem::GenerateCriteria(Enhancer.Criteria));
+		Enhancer.LevelCheck.WriteToStream(Stream);
+		Enhancer.Enhancement.WriteToStream(&Stream);
+		}
 	}

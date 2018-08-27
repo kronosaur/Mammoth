@@ -14,6 +14,7 @@ class CStationHullDesc
 		ALERROR Bind (SDesignLoadCtx &Ctx);
 		int CalcDamageEffectiveness (CSpaceObject *pAttacker, CInstalledDevice *pWeapon) const;
 		Metric CalcHitsToDestroy (int iLevel) const;
+		inline bool CanBeHit (void) const { return !m_bCannotBeHit; }
 		inline bool CanBeWrecked (void) const { return (!IsImmutable() && GetMaxHitPoints() > 0); }
 		bool FindDataField (const CString &sField, CString *retsValue) const;
 		inline CArmorClass *GetArmorClass (void) const { return (m_pArmor ? m_pArmor->GetArmorClass() : NULL); }
@@ -41,6 +42,7 @@ class CStationHullDesc
 		
 		bool m_bMultiHull;					//	Must have WMD to damage
 		bool m_bImmutable;					//	Cannot be damaged
+		bool m_bCannotBeHit;				//	Transparent to projectiles
 	};
 
 class CStationHull
@@ -49,6 +51,7 @@ class CStationHull
 		CStationHull (void);
 
 		inline bool CanBeDestroyed (void) const { return (m_iStructuralHP > 0); }
+		inline bool CanBeHit (void) const { return !m_fCannotBeHit; }
 		ICCItem *FindProperty (const CString &sProperty) const;
 		inline int GetArmorLevel (void) const { return m_iArmorLevel; }
 		inline int GetHitPoints (void) const { return m_iHitPoints; }
@@ -87,7 +90,7 @@ class CStationHull
 		
 		DWORD m_fMultiHull:1;				//	Must have WMD to damage
 		DWORD m_fImmutable:1;				//	Cannot be damaged
-		DWORD m_fSpare3:1;
+		DWORD m_fCannotBeHit:1;				//	Cannot be hit
 		DWORD m_fSpare4:1;
 		DWORD m_fSpare5:1;
 		DWORD m_fSpare6:1;
@@ -276,6 +279,7 @@ class CStationType : public CDesignType
 		inline bool CanHitFriends (void) { return (m_fNoFriendlyFire ? false : true); }
 		inline CXMLElement *GetAbandonedScreen (void) { return m_pAbandonedDockScreen.GetDesc(); }
 		inline CDesignType *GetAbandonedScreen (CString *retsName) { return m_pAbandonedDockScreen.GetDockScreen(this, retsName); }
+		CurrencyValue GetBalancedTreasure (void) const;
 		inline CEffectCreator *GetBarrierEffect (void) { return m_pBarrierEffect; }
 		inline IShipGenerator *GetConstructionTable (void) { return m_pConstruction; }
 		CSovereign *GetControllingSovereign (void);
@@ -350,7 +354,7 @@ class CStationType : public CDesignType
 		inline bool IsShipEncounter (void) const { return (m_fShipEncounter ? true : false); }
 		inline bool IsStatic (void) { return (m_fStatic ? true : false); }
 		inline bool IsStationEncounter (void) const { return (m_fStationEncounter ? true : false); }
-		inline bool IsTimeStopImmune (void) { return (m_fTimeStopImmune ? true : false); }
+		inline bool IsTimeStopImmune (void) const { return (m_fTimeStopImmune ? true : false); }
 		inline bool IsUniqueInSystem (void) const { return GetEncounterDesc().IsUniqueInSystem(); }
 		inline bool IsWall (void) { return (m_fWall ? true : false); }
 		void MarkImages (const CCompositeImageSelector &Selector);
@@ -364,6 +368,7 @@ class CStationType : public CDesignType
 		inline bool ShowsMapDetails (void) { return (m_fNoMapDetails ? false : true); }
 		inline bool ShowsMapIcon (void) { return (m_fNoMapIcon ? false : true); }
 		inline bool ShowsMapLabel (void) { return (m_fNoMapLabel ? false : true); }
+		inline bool ShowsUnexploredAnnotation (void) const { return (m_fShowsUnexploredAnnotation ? true : false); }
 		inline bool UsesReverseArticle (void) { return (m_fReverseArticle ? true : false); }
 
 		//	CDesignType overrides
@@ -380,8 +385,10 @@ class CStationType : public CDesignType
 		static Metric CalcSatelliteHitsToDestroy (CXMLElement *pSatellites, int iLevel, bool bIgnoreChance = false);
 		static Metric CalcSatelliteStrength (CXMLElement *pSatellites, int iLevel, bool bIgnoreChance = false);
 		static Metric CalcSatelliteTreasureValue (CXMLElement *pSatellites, int iLevel, bool bIgnoreChance = false);
+		static inline ScaleTypes LoadScaleType (DWORD dwLoad) { return (ScaleTypes)dwLoad; }
 		static ScaleTypes ParseScale (const CString sValue);
 		static ESizeClass ParseSizeClass (const CString sValue);
+		static inline DWORD SaveScaleType (ScaleTypes iScale) { return (DWORD)iScale; }
 
 	protected:
 		//	CDesignType overrides
@@ -408,7 +415,7 @@ class CStationType : public CDesignType
 			};
 
 		void AddTypesUsedByXML (CXMLElement *pElement, TSortMap<DWORD, bool> *retTypesUsed);
-		Metric CalcBalance (int iLevel) const;
+		Metric CalcBalance (void) const;
 		Metric CalcDefenderStrength (int iLevel) const;
 		int CalcHitsToDestroy (int iLevel) const;
 		Metric CalcTreasureValue (int iLevel) const;
@@ -423,7 +430,7 @@ class CStationType : public CDesignType
 		CSovereignRef m_pSovereign;						//	Sovereign
 		ScaleTypes m_iScale;							//	Scale
 		Metric m_rParallaxDist;							//	Parallax distance for background objects
-		int m_iLevel;									//	Station level
+		mutable int m_iLevel;							//	Station level
 		Metric m_rMass;									//	Mass of station
 														//		For stars, this is in solar masses
 														//		For worlds, this is in Earth masses
@@ -473,9 +480,9 @@ class CStationType : public CDesignType
 		DWORD m_fBuildReinforcements:1;					//	If TRUE, reinforcements are built instead of brought in
 
 		DWORD m_fStationEncounter:1;					//	If TRUE, we're just an encounter wrapper that creates stations
-		DWORD m_fSpare2:1;
-		DWORD m_fSpare3:1;
-		DWORD m_fSpare4:1;
+		DWORD m_fCalcLevel:1;							//	If TRUE, m_iLevel needs to be computed
+		DWORD m_fBalanceValid:1;						//	If TRUE, m_rCombatBalance is valid
+		DWORD m_fShowsUnexploredAnnotation:1;			//	If TRUE, we show unexplored annotation (used for asteroids)
 		DWORD m_fSpare5:1;
 		DWORD m_fSpare6:1;
 		DWORD m_fSpare7:1;
@@ -544,6 +551,10 @@ class CStationType : public CDesignType
 		CEffectCreatorRef m_pBarrierEffect;				//	Effect when object hits station
 		CSovereignRef m_pControllingSovereign;			//	If controlled by different sovereign
 														//	(e.g., centauri occupation)
+
+		//	Cached
+		mutable Metric m_rCombatBalance = 0.0;			//	Station power relative to level (1.0 == balanced)
+
 		//	Temporary
 		int m_iChance;									//	Used when computing chance of encounter
 

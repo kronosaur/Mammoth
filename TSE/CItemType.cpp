@@ -46,6 +46,7 @@
 #define PLURAL_NAME_ATTRIB						CONSTLIT("pluralName")
 #define REVERSE_ARTICLE_ATTRIB					CONSTLIT("reverseArticle")
 #define SECOND_PLURAL_ATTRIB					CONSTLIT("secondPlural")
+#define SHOW_CHARGES_IN_USE_MENU				CONSTLIT("showChargesInUseMenu")
 #define SHOW_REFERENCE_ATTRIB					CONSTLIT("showReference")
 #define SORT_NAME_ATTRIB						CONSTLIT("sortName")
 #define UNID_ATTRIB								CONSTLIT("UNID")
@@ -182,6 +183,14 @@ static char *CACHED_EVENTS[CItemType::evtCount] =
 		"OnEnable",
 		"OnInstall",
 		"OnRefuel",
+	};
+
+static TStaticStringTable<TStaticStringEntry<ItemFates>, 5> FATE_TABLE = {
+	"alwaysComponetized",	fateComponetized,
+	"alwaysDamaged",		fateDamaged,
+	"alwaysDestroyed",		fateDestroyed,
+	"alwaysSurvives",		fateSurvives,
+	"default",				fateNone,
 	};
 
 static CStationType *g_pFlotsamStationType = NULL;
@@ -1526,7 +1535,8 @@ ALERROR CItemType::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 	m_fUseEnabled = pDesc->GetAttributeBool(USE_ENABLED_ONLY_ATTRIB);
 	m_fUseCompleteArmor = pDesc->GetAttributeBool(USE_COMPLETE_ARMOR_ONLY_ATTRIB);
 	m_fUseAsArmorSet = pDesc->GetAttributeBool(USE_AS_ARMOR_SET_ATTRIB);
-
+	m_fShowChargesInUseMenu = pDesc->GetAttributeBool(SHOW_CHARGES_IN_USE_MENU);
+	
 	//	Process sub-elements
 
 	for (i = 0; i < pDesc->GetContentElementCount(); i++)
@@ -1938,6 +1948,30 @@ void CItemType::OnWriteToStream (IWriteStream *pStream)
 	m_sUnknownName.WriteToStream(pStream);
 
 	m_Components.WriteToStream(pStream);
+	}
+
+ALERROR CItemType::ParseFate (SDesignLoadCtx &Ctx, const CString &sDesc, ItemFates *retiFate)
+
+//	ParseFate
+//
+//	Parses a fate string
+
+	{
+	int iPos;
+
+	if (sDesc.IsBlank())
+		*retiFate = fateNone;
+
+	else if (FATE_TABLE.FindPos(sDesc, &iPos))
+		*retiFate = FATE_TABLE[iPos].Value;
+
+	else
+		{
+		Ctx.sError = strPatternSubst(CONSTLIT("Invalid fate option: %s"), sDesc);
+		return ERR_FAIL;
+		}
+
+	return NOERROR;
 	}
 
 bool CItemType::ParseItemCategory (const CString &sCategory, ItemCategories *retCategory)

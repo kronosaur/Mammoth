@@ -331,6 +331,7 @@ class CUniverse
 		inline void NotifyOnObjDeselected (CSpaceObject *pObj) { pObj->FireOnDeselected(); }
 		void NotifyOnObjDestroyed (SDestroyCtx &Ctx);
 		inline void NotifyOnObjSelected (CSpaceObject *pObj) { pObj->FireOnSelected(); }
+		void NotifyOnPlayerEnteredGate (CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pStargate);
 		inline ALERROR LoadNewExtension (const CString &sFilespec, const CIntegerIP &FileDigest, CString *retsError) { return m_Extensions.LoadNewExtension(sFilespec, FileDigest, retsError); }
 		inline bool LogImageLoad (void) const { return (m_iLogImageLoad == 0); }
 		inline void LogOutput (const CString &sLine) const { m_pHost->LogOutput(sLine); }
@@ -392,6 +393,7 @@ class CUniverse
 		inline CCodeChain &GetCC (void) { return m_CC; }
 		inline CTopologyNode *GetCurrentTopologyNode (void) { return (m_pCurrentSystem ? m_pCurrentSystem->GetTopology() : NULL); }
 		inline CSystem *GetCurrentSystem (void) { return m_pCurrentSystem; }
+		inline IPlayerController::EUIMode GetCurrentUIMode (void) const { return (m_pPlayer ? m_pPlayer->GetUIMode() : IPlayerController::uimodeUnknown); }
 		inline int GetPaintTick (void) { return m_iPaintTick; }
 		inline CSpaceObject *GetPOV (void) const { return m_pPOV; }
 		inline IPlayerController *GetPlayer (void) const { return m_pPlayer; }

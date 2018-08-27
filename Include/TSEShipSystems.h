@@ -60,12 +60,15 @@ class CArmorSystem
                 m_iHealerLeft(0)
             { }
 
+		void AccumulatePerformance (SShipPerformanceCtx &Ctx) const;
+		void AccumulatePowerUsed (SUpdateCtx &Ctx, CSpaceObject *pObj, int &iPowerUsed, int &iPowerGenerated);
 		int CalcTotalHitPoints (CSpaceObject *pSource, int *retiMaxHP = NULL) const;
         inline int GetHealerLeft (void) const { return m_iHealerLeft; }
 		inline CInstalledArmor &GetSegment (int iSeg) { return m_Segments[iSeg]; }
 		inline int GetSegmentCount (void) const { return m_Segments.GetCount(); }
         inline int IncHealerLeft (int iInc) { SetHealerLeft(m_iHealerLeft + iInc); return m_iHealerLeft; }
         void Install (CSpaceObject *pObj, const CShipArmorDesc &Desc, bool bInCreate = false);
+		bool IsImmune (CSpaceObject *pObj, SpecialDamageTypes iSpecialDamage) const;
         void ReadFromStream (SLoadCtx &Ctx, CSpaceObject *pObj);
 		bool RepairAll (CSpaceObject *pSource);
 		bool RepairSegment (CSpaceObject *pSource, int iSeg, int iHPToRepair, int *retiHPRepaired = NULL);
@@ -87,6 +90,7 @@ class CDeviceSystem
 		CDeviceSystem (void);
 
 		void AccumulateEnhancementsToArmor (CSpaceObject *pObj, CInstalledArmor *pArmor, TArray<CString> &EnhancementIDs, CItemEnhancementStack *pEnhancements);
+		void AccumulatePerformance (SShipPerformanceCtx &Ctx) const;
 		void AccumulatePowerUsed (SUpdateCtx &Ctx, CSpaceObject *pObj, int &iPowerUsed, int &iPowerGenerated);
 		int CalcSlotsInUse (int *retiWeaponSlots, int *retiNonWeapon) const;
 		void CleanUp (void);
@@ -313,7 +317,6 @@ class CRotationDesc
 		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc);
         void Interpolate (const CRotationDesc &From, const CRotationDesc &To, Metric rInterpolate = 0.5);
 
-
 	private:
 		struct SEntry
 			{
@@ -356,7 +359,8 @@ class CIntegralRotationDesc
         void InitFromDesc (const CRotationDesc &Desc);
 		void Init (int iFrameCount, Metric rMaxRotation = 360.0, Metric rAccel = 1.0, Metric rAccelStop = 1.0);
 
-        static int GetRotationAngle (int iCount, int iIndex) { return ((iCount > 0 && iCount <= 360 && m_FacingsData[iCount].bInitialized) ? m_FacingsData[iCount].FrameIndexToAngle[iIndex % iCount] : 0); }
+		static int GetFrameIndex (int iCount, int iAngle) { return (InitFacingsData(iCount) ? m_FacingsData[iCount].AngleToFrameIndex[AngleMod(iAngle)] : 0); }
+        static int GetRotationAngle (int iCount, int iIndex) { return (InitFacingsData(iCount) ? m_FacingsData[iCount].FrameIndexToAngle[iIndex % iCount] : 0); }
 
     private:
 		struct SFacingsData
@@ -375,6 +379,7 @@ class CIntegralRotationDesc
 		int m_iRotationAccel;				//	Rotation acceleration (in 1/1000ths of a rotation)
 		int m_iRotationAccelStop;			//	Rotation acceleration when stopping rotation (in 1/1000th of a rotation)
 
+		static bool InitFacingsData (int iCount);
 		static SFacingsData m_FacingsData[360 + 1];
     };
 
@@ -479,60 +484,6 @@ class CDriveDesc
 
 		DWORD m_fInertialess:1;				//	Inertialess drive
 	    DWORD m_dwSpare:31;
-	};
-
-//	Hull Descriptor ------------------------------------------------------------
-
-class CHullDesc
-	{
-	public:
-		ALERROR Bind (SDesignLoadCtx &Ctx);
-		int CalcArmorSpeedBonus (int iSegmentCount, int iTotalArmorMass) const;
-		ICCItem *CalcMaxSpeedByArmorMass (CCodeChainCtx &Ctx, int iStdSpeed) const;
-		inline const CItemCriteria &GetArmorCriteria (void) const { return m_ArmorCriteria; }
-		inline int GetCargoSpace (void) const { return m_iCargoSpace; }
-		inline const CItemCriteria &GetDeviceCriteria (void) const { return m_DeviceCriteria; }
-		inline Metric GetExtraPoints (void) const { return m_rExtraPoints; }
-		inline int GetMass (void) const { return m_iMass; }
-		inline int GetMaxArmorMass (void) const { return m_iMaxArmorMass; }
-		inline int GetMaxArmorSpeedPenalty (void) const { return m_iMaxArmorSpeedPenalty; }
-		inline int GetMaxCargoSpace (void) const { return m_iMaxCargoSpace; }
-		inline int GetMaxDevices (void) const { return m_iMaxDevices; }
-		inline int GetMaxNonWeapons (void) const { return m_iMaxNonWeapons; }
-		inline int GetMaxReactorPower (void) const { return m_iMaxReactorPower; }
-		inline int GetMaxWeapons (void) const { return m_iMaxWeapons; }
-		inline int GetMinArmorSpeedBonus (void) const { return m_iMinArmorSpeedBonus; }
-		inline int GetSize (void) const { return m_iSize; }
-		inline int GetStdArmorMass (void) const { return m_iStdArmorMass; }
-		inline const CCurrencyAndValue &GetValue (void) const { return m_Value; }
-		void InitDefaultArmorLimits (int iMaxSpeed, Metric rThrustRatio);
-		ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, int iMaxSpeed);
-		inline void SetSize (int iSize) { m_iSize = iSize; }
-		inline void SetMaxCargoSpace (int iCargoSpace) { m_iMaxCargoSpace = iCargoSpace; }
-		inline void SetValue (const CCurrencyAndValue &Value) { m_Value = Value; }
-
-	private:
-		int CalcMinArmorMassForSpeed (int iSpeed, int iStdSpeed) const;
-
-		int m_iSize = 0;					//	Length of ship in meters
-		int m_iMass = 0;					//	Empty hull mass (tons)
-		CCurrencyAndValue m_Value;			//	Value of hull alone (excluding any devices/armor)
-		int m_iCargoSpace = 0;				//	Default cargo space (tons)
-
-		CItemCriteria m_ArmorCriteria;		//	Allowable armor
-		CItemCriteria m_DeviceCriteria;		//	Allowable devices
-		int m_iStdArmorMass = 0;			//	No penalty at this armor mass
-		int m_iMaxArmorMass = 0;			//	Max mass of single armor segment
-		int m_iMaxArmorSpeedPenalty = 0;	//	Change to speed at max armor mass (1/100th light-speed)
-		int m_iMinArmorSpeedBonus = 0;		//	Change to speed at 1/2 std armor mass
-
-		int m_iMaxCargoSpace = 0;			//	Max amount of cargo space with expansion (tons)
-		int m_iMaxReactorPower = 0;			//	Max compatible reactor power
-		int m_iMaxDevices = 0;				//	Max number of devices
-		int m_iMaxWeapons = 0;				//	Max number of weapon devices (including launchers)
-		int m_iMaxNonWeapons = 0;			//	Max number of non-weapon devices
-
-		Metric m_rExtraPoints = 0.0;		//	Extra point to calculate hull value
 	};
 
 //  Reactor --------------------------------------------------------------------

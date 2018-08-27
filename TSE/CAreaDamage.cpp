@@ -276,7 +276,6 @@ void CAreaDamage::OnUpdate (SUpdateCtx &Ctx, Metric rSecondsPerTick)
 	EffectCtx.pDamageDesc = m_pDesc;
 	EffectCtx.pEnhancements = m_pEnhancements;
 	EffectCtx.iCause = m_Source.GetCause();
-	EffectCtx.bAutomatedWeapon = IsAutomatedWeapon();
 	EffectCtx.Attacker = m_Source;
 
 	m_pPainter->OnUpdate(EffectCtx);
@@ -347,7 +346,7 @@ void CAreaDamage::PaintLRSForeground (CG32bitImage &Dest, int x, int y, const Vi
 		}
 	}
 
-bool CAreaDamage::PointInObject (const CVector &vObjPos, const CVector &vPointPos)
+bool CAreaDamage::PointInObject (const CVector &vObjPos, const CVector &vPointPos) const
 
 //	PointInObject
 //

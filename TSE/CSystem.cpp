@@ -34,36 +34,11 @@ int g_iGateTimerTick = -1;
 int g_cxStarField = -1;
 int g_cyStarField = -1;
 
-enum LabelPositionTypes
-	{
-	labelPosNone,
-
-	labelPosRight,
-	labelPosLeft,
-	labelPosBottom,
-	};
-
-struct SLabelEntry
-	{
-	CSpaceObject *pObj;
-	int x;
-	int y;
-	int cxLabel;
-
-	RECT rcLabel;
-	int iPosition;
-	int iNewPosition;
-	};
-
 const CG32bitPixel g_rgbSpaceColor = CG32bitPixel(0,0,8);
 const Metric g_MetersPerKlick = 1000.0;
 const Metric MAP_VERTICAL_ADJUST =						1.4;
 
 const CG32bitPixel RGB_GRID_LINE =						CG32bitPixel(65, 68, 77);
-
-const int LABEL_SPACING_X =								8;
-const int LABEL_SPACING_Y =								4;
-const int LABEL_OVERLAP_Y =								1;
 
 const Metric BACKGROUND_OBJECT_FACTOR =					4.0;
 
@@ -74,11 +49,6 @@ const Metric CELL_BORDER =								(128.0 * g_KlicksPerPixel);
 const Metric SAME_POS_THRESHOLD2 =						(g_KlicksPerPixel * g_KlicksPerPixel);
 
 const Metric MAP_GRID_SIZE =							3000.0 * LIGHT_SECOND;
-
-bool CalcOverlap (SLabelEntry *pEntries, int iCount);
-void SetLabelBelow (SLabelEntry &Entry, int cyChar);
-void SetLabelLeft (SLabelEntry &Entry, int cyChar);
-void SetLabelRight (SLabelEntry &Entry, int cyChar);
 
 CSystem::CSystem (CUniverse *pUniv, CTopologyNode *pTopology) : 
 		m_dwID(OBJID_NULL),
@@ -630,7 +600,8 @@ void CSystem::CalcViewportCtx (SViewportPaintCtx &Ctx, const RECT &rcView, CSpac
 
 	//	Initialize some flags
 
-	Ctx.fEnhancedDisplay = ((dwFlags & VWP_ENHANCED_DISPLAY) ? true : false);
+	Ctx.bEnhancedDisplay = ((dwFlags & VWP_ENHANCED_DISPLAY) ? true : false);
+	Ctx.bShowUnexploredAnnotation = ((dwFlags & VWP_MINING_DISPLAY) ? true : false);
 	Ctx.fNoStarfield = ((dwFlags & VWP_NO_STAR_FIELD) ? true : false);
 	Ctx.fShowManeuverEffects = g_pUniverse->GetSFXOptions().IsManeuveringEffectEnabled();
 	Ctx.fNoStarshine = !g_pUniverse->GetSFXOptions().IsStarshineEnabled();
@@ -740,96 +711,6 @@ void CSystem::CancelTimedEvent (CDesignType *pSource, const CString &sEvent, boo
 				}
 			}
 		}
-	}
-
-void CSystem::ComputeMapLabels (void)
-
-//	ComputeMapLabels
-//
-//	Positions the labels for all objects that need one
-
-	{
-	int i;
-	const int MAX_LABELS = 100;
-	int iLabelCount = 0;
-	SLabelEntry Labels[MAX_LABELS];
-
-	//	Compute some font metrics
-
-	int cxChar = g_pUniverse->GetNamedFont(CUniverse::fontMapLabel).GetAverageWidth();
-	int cyChar = g_pUniverse->GetNamedFont(CUniverse::fontMapLabel).GetHeight();
-
-	//	Compute a transform for map coordinate
-
-	ViewportTransform Trans(CVector(), 
-			g_MapKlicksPerPixel, 
-			g_MapKlicksPerPixel * MAP_VERTICAL_ADJUST,
-			0, 
-			0);
-
-	//	Loop over all objects and see if they have a map label
-
-	for (i = 0; i < GetObjectCount() && iLabelCount < MAX_LABELS; i++)
-		{
-		CSpaceObject *pObj = GetObject(i);
-
-		if (pObj && pObj->HasMapLabel())
-			{
-			Labels[iLabelCount].pObj = pObj;
-			Trans.Transform(pObj->GetPos(), &Labels[iLabelCount].x, &Labels[iLabelCount].y);
-			Labels[iLabelCount].cxLabel = g_pUniverse->GetNamedFont(CUniverse::fontMapLabel).MeasureText(pObj->GetNounPhrase(0));
-
-			SetLabelRight(Labels[iLabelCount], cyChar);
-
-			iLabelCount++;
-			}
-		}
-
-	//	Keep looping until we minimize overlap
-
-	bool bOverlap;
-	int iIteration = 0;
-
-	do
-		{
-		bOverlap = CalcOverlap(Labels, iLabelCount);
-		if (bOverlap)
-			{
-			//	Modify the label location of any overlapping labels
-
-			for (i = 0; i < iLabelCount; i++)
-				{
-				switch (Labels[i].iNewPosition)
-					{
-					case labelPosRight:
-						{
-						SetLabelRight(Labels[i], cyChar);
-						break;
-						}
-
-					case labelPosLeft:
-						{
-						SetLabelLeft(Labels[i], cyChar);
-						break;
-						}
-
-					case labelPosBottom:
-						{
-						SetLabelBelow(Labels[i], cyChar);
-						break;
-						}
-					}
-				}
-
-			iIteration++;
-			}
-		}
-	while (bOverlap && iIteration < 10);
-
-	//	Set the label position for all the objects
-
-	for (i = 0; i < iLabelCount; i++)
-		Labels[i].pObj->SetMapLabelPos(Labels[i].rcLabel.left - Labels[i].x, Labels[i].rcLabel.top - Labels[i].y - LABEL_OVERLAP_Y);
 	}
 
 void CSystem::ComputeRandomEncounters (void)
@@ -1905,11 +1786,6 @@ ALERROR CSystem::CreateWeaponFragments (SShotCreateCtx &Ctx, CSpaceObject *pMiss
 				CSpaceObject *pNewObj;
 				if (error = CreateWeaponFire(FragCtx, &pNewObj))
 					return error;
-
-				//	Preserve automated weapon flag
-
-				if (pMissileSource && pMissileSource->IsAutomatedWeapon())
-					pNewObj->SetAutomatedWeapon();
 				}
 			}
 
@@ -1973,6 +1849,61 @@ CSpaceObject *CSystem::FindObject (DWORD dwID)
 		if (pObj && pObj->GetID() == dwID && !pObj->IsDestroyed())
 			return pObj;
 		}
+
+	return NULL;
+	}
+
+CSpaceObject *CSystem::FindObjectInRange (const CVector &vCenter, Metric rRange, const CSpaceObjectCriteria &Criteria) const
+
+//	FindObjectInRange
+//
+//	Returns an object in range of the given position.
+//	NOTE: We do not return the nearest object, just an arbitrary object inside 
+//	the range.
+
+	{
+	Metric rRange2 = rRange * rRange;
+
+	//	If we have a criteria, we need to check.
+
+	if (!Criteria.IsEmpty())
+		{
+		CSpaceObjectCriteria::SCtx Ctx(Criteria);
+
+		SSpaceObjectGridEnumerator i;
+		EnumObjectsInBoxStart(i, vCenter, rRange, gridNoBoxCheck);
+		while (EnumObjectsInBoxHasMore(i))
+			{
+			CSpaceObject *pObj = EnumObjectsInBoxGetNextFast(i);
+			if (pObj->MatchesCriteria(Ctx, Criteria)
+					&& (!pObj->IsIntangible() || pObj->IsVirtual()))
+				{
+				Metric rDist2 = (pObj->GetPos() - vCenter).Length2();
+				if (rDist2 < rRange2)
+					return pObj;
+				}
+			}
+		}
+
+	//	If we don't have a criteria, then we can do this faster.
+
+	else 
+		{
+		SSpaceObjectGridEnumerator i;
+		EnumObjectsInBoxStart(i, vCenter, rRange, gridNoBoxCheck);
+		while (EnumObjectsInBoxHasMore(i))
+			{
+			CSpaceObject *pObj = EnumObjectsInBoxGetNextFast(i);
+			if (!pObj->IsIntangible() || pObj->IsVirtual())
+				{
+				Metric rDist2 = (pObj->GetPos() - vCenter).Length2();
+				if (rDist2 < rRange2)
+					return pObj;
+				}
+			}
+		}
+
+	//	Not found
 
 	return NULL;
 	}
@@ -2134,9 +2065,14 @@ void CSystem::FireSystemWeaponEvents (CSpaceObject *pShot, CWeaponFireDesc *pDes
 	{
 	if (!m_EventHandlers.IsEmpty())
 		{
+		//	Skip any anything except the first shot in a multi-shot weapon.
+
+		if (!(dwFlags & SShotCreateCtx::CWF_PRIMARY))
+			NULL;
+
 		//	Skip any fragments
 
-		if (dwFlags & SShotCreateCtx::CWF_FRAGMENT)
+		else if (dwFlags & SShotCreateCtx::CWF_FRAGMENT)
 			NULL;
 
 		//	If this is an explosion, then fire explosion event
@@ -3057,7 +2993,7 @@ void CSystem::PaintViewport (CG32bitImage &Dest,
 				bool bMarker = pObj->IsPlayerTarget()
 						|| pObj->IsPlayerDestination()
 						|| pObj->IsHighlighted()
-						|| (Ctx.fEnhancedDisplay
+						|| (Ctx.bEnhancedDisplay
 							&& (pObj->GetScale() == scaleShip || pObj->GetScale() == scaleStructure)
 							&& pObj->PosInBox(Ctx.vEnhancedUR, Ctx.vEnhancedLL)
 							&& Perception.IsVisibleInLRS(Ctx.pCenter, pObj)
@@ -3965,6 +3901,16 @@ void CSystem::RemoveObject (SDestroyCtx &Ctx)
 
 	m_EventHandlers.ObjDestroyed(Ctx.pObj);
 
+	//	If this is the player and we're resurrecting, then remove the player from
+	//	the grid. We need to do this because resurrecting player ships don't have
+	//	the destroyed flag set, but we don't want them to show up in future 
+	//	searches.
+
+	if (Ctx.pObj->IsPlayer() && Ctx.bResurrectPending)
+		{
+		m_ObjGrid.Delete(Ctx.pObj);
+		}
+
 	//	Deal with joints
 
 	m_Joints.ObjDestroyed(Ctx.pObj);
@@ -4406,7 +4352,14 @@ ALERROR CSystem::StargateCreated (CSpaceObject *pGate, const CString &sStargateI
 	//	Look for the stargate in the topology; if we don't find it, then we need to add it
 
 	if (!m_pTopology->FindStargate(sGateID))
-		m_pTopology->AddStargateAndReturn(sGateID, sDestNodeID, sDestEntryPoint);
+		{
+		CTopologyNode::SStargateDesc GateDesc;
+		GateDesc.sName = sGateID;
+		GateDesc.sDestNode = sDestNodeID;
+		GateDesc.sDestName = sDestEntryPoint;
+
+		m_pTopology->AddStargateAndReturn(GateDesc);
+		}
 
 	//	Add this as a named object (so we can come back here)
 
@@ -4430,7 +4383,7 @@ void CSystem::StopTime (const CSpaceObjectList &Targets, int iDuration)
 		{
 		CSpaceObject *pObj = Targets.GetObj(i);
 
-		if (pObj && !pObj->IsTimeStopImmune())
+		if (pObj && !pObj->IsImmuneTo(CConditionSet::cndTimeStopped))
 			pObj->StopTime();
 		}
 
@@ -4451,7 +4404,7 @@ void CSystem::StopTimeForAll (int iDuration, CSpaceObject *pExcept)
 		{
 		CSpaceObject *pObj = GetObject(i);
 
-		if (pObj && pObj != pExcept && !pObj->IsTimeStopImmune())
+		if (pObj && pObj != pExcept && !pObj->IsImmuneTo(CConditionSet::cndTimeStopped))
 			pObj->StopTime();
 		}
 
@@ -4611,24 +4564,32 @@ void CSystem::Update (SSystemUpdateCtx &SystemCtx, SViewportAnnotations *pAnnota
 	for (i = 0; i < GetObjectCount(); i++)
 		{
 		CSpaceObject *pObj = GetObject(i);
+		if (pObj == NULL)
+			continue;
 
-		if (pObj && !pObj->IsTimeStopped())
+		//	Initialize context
+
+		Ctx.SetTimeStopped(pObj->IsTimeStopped());
+
+		//	Update behavior first.
+
+		if (!Ctx.IsTimeStopped())
 			{
 			SetProgramState(psUpdatingBehavior, pObj);
 			pObj->Behavior(Ctx);
+			}
 
-			//	Update the objects
+		//	Now update. We do this even if we're time-stopped because we might
+		//	need to update the overlay that stops time.
 
-			SetProgramState(psUpdatingObj, pObj);
-			pObj->Update(Ctx);
+		SetProgramState(psUpdatingObj, pObj);
+		pObj->Update(Ctx);
 
-			//	NOTE: pObj may have been destroyed after
-			//	Update(). Do not use the pointer.
+		//	Debug
 
 #ifdef DEBUG_PERFORMANCE
-			iUpdateObj++;
+		iUpdateObj++;
 #endif
-			}
 		}
 	DebugStopTimer("Updating objects");
 
@@ -5129,79 +5090,4 @@ void CSystem::WriteSovereignRefToStream (CSovereign *pSovereign, IWriteStream *p
 		dwSave = pSovereign->GetUNID();
 
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
-	}
-
-//	Miscellaneous --------------------------------------------------------------
-
-bool CalcOverlap (SLabelEntry *pEntries, int iCount)
-	{
-	bool bOverlap = false;
-	int i, j;
-
-	for (i = 0; i < iCount; i++)
-		{
-		pEntries[i].iNewPosition = labelPosNone;
-
-		for (j = 0; j < iCount; j++)
-			if (i != j)
-				{
-				if (RectsIntersect(pEntries[i].rcLabel, pEntries[j].rcLabel))
-					{
-					int xDelta = pEntries[j].x - pEntries[i].x;
-					int yDelta = pEntries[j].y - pEntries[i].y;
-
-					switch (pEntries[i].iPosition)
-						{
-						case labelPosRight:
-							{
-							if (xDelta > 0)
-								pEntries[i].iNewPosition = labelPosLeft;
-							break;
-							}
-
-						case labelPosLeft:
-							{
-							if (xDelta < 0)
-								pEntries[i].iNewPosition = labelPosBottom;
-							break;
-							}
-						}
-
-					bOverlap = true;
-					break;
-					}
-				}
-		}
-
-	return bOverlap;
-	}
-
-void SetLabelBelow (SLabelEntry &Entry, int cyChar)
-	{
-	Entry.rcLabel.top = Entry.y + LABEL_SPACING_Y + LABEL_OVERLAP_Y;
-	Entry.rcLabel.bottom = Entry.rcLabel.top + cyChar - (2 * LABEL_OVERLAP_Y);
-	Entry.rcLabel.left = Entry.x - (Entry.cxLabel / 2);
-	Entry.rcLabel.right = Entry.rcLabel.left + Entry.cxLabel;
-
-	Entry.iPosition = labelPosBottom;
-	}
-
-void SetLabelLeft (SLabelEntry &Entry, int cyChar)
-	{
-	Entry.rcLabel.left = Entry.x - (LABEL_SPACING_X + Entry.cxLabel);
-	Entry.rcLabel.top = Entry.y - (cyChar / 2) + LABEL_OVERLAP_Y;
-	Entry.rcLabel.right = Entry.rcLabel.left + Entry.cxLabel;
-	Entry.rcLabel.bottom = Entry.rcLabel.top + cyChar - (2 * LABEL_OVERLAP_Y);
-
-	Entry.iPosition = labelPosLeft;
-	}
-
-void SetLabelRight (SLabelEntry &Entry, int cyChar)
-	{
-	Entry.rcLabel.left = Entry.x + LABEL_SPACING_X;
-	Entry.rcLabel.top = Entry.y - (cyChar / 2) + LABEL_OVERLAP_Y;
-	Entry.rcLabel.right = Entry.rcLabel.left + Entry.cxLabel;
-	Entry.rcLabel.bottom = Entry.rcLabel.top + cyChar - (2 * LABEL_OVERLAP_Y);
-
-	Entry.iPosition = labelPosRight;
 	}

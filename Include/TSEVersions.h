@@ -5,9 +5,9 @@
 
 #pragma once
 
-constexpr DWORD API_VERSION =							40;
-constexpr DWORD UNIVERSE_SAVE_VERSION =					34;
-constexpr DWORD SYSTEM_SAVE_VERSION =					157;
+constexpr DWORD API_VERSION =							41;
+constexpr DWORD UNIVERSE_SAVE_VERSION =					35;
+constexpr DWORD SYSTEM_SAVE_VERSION =					162;
 
 //	Uncomment out the following define when building a stable release
 
@@ -101,6 +101,9 @@ constexpr DWORD SYSTEM_SAVE_VERSION =					157;
 //
 //	34: 1.8 Alpha 4
 //		Added m_sCreatorID to CTopologyNode
+//
+//	35: 1.8 Beta 2
+//		Added m_iExisting to CMissionType
 
 //	SYSTEM VERSION HISTORY -----------------------------------------------------
 //
@@ -583,3 +586,18 @@ constexpr DWORD SYSTEM_SAVE_VERSION =					157;
 //
 //	157: 1.8 Beta 1
 //		Added m_sID to CInstalledDevice
+//
+//	158: 1.8 Beta 2
+//		Removed m_fAutomatedWeapon from CSpaceObject
+//
+//	159: 1.8 Beta 2
+//		Added m_iExtraPowerUse to replace m_iSlotBonus in CInstalledDevice
+//
+//	160: 1.8 Beta 3
+//		Moved some condition flags to COverlayList
+//
+//	161: 1.8 Beta 3
+//		Added m_vPos to CTimedEncounterEvent
+//
+//	162: 1.8 Beta 3
+//		Remove m_xMapLabel and m_yMapLabel from CStation

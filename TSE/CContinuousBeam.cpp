@@ -156,8 +156,7 @@ ALERROR CContinuousBeam::Create (CSystem *pSystem, SShotCreateCtx &Ctx, CContinu
 
 	//	Create the effect painter, if we've got one
 
-	bool bIsTracking = Ctx.pTarget && Ctx.pDesc->IsTracking();
-	pBeam->m_pPainter = Ctx.pDesc->CreateEffectPainter(bIsTracking, true);
+	pBeam->m_pPainter = Ctx.pDesc->CreateEffectPainter(Ctx);
 
 	//	Remember the sovereign of the source (in case the source is destroyed)
 
@@ -225,18 +224,13 @@ EDamageResults CContinuousBeam::DoDamage (CSpaceObject *pHit, const CVector &vHi
 //	Do damage to the given object
 
 	{
-	SDamageCtx DamageCtx;
-	DamageCtx.pObj = pHit;
-	DamageCtx.pDesc = m_pDesc;
-	DamageCtx.Damage = m_pDesc->GetDamage();
-	DamageCtx.Damage.AddEnhancements(m_pEnhancements);
-	DamageCtx.Damage.SetCause(m_Source.GetCause());
-	if (IsAutomatedWeapon())
-		DamageCtx.Damage.SetAutomatedWeapon();
-	DamageCtx.iDirection = AngleMod(iHitDir + mathRandom(0, 30) - 15);
-	DamageCtx.vHitPos = vHitPos;
-	DamageCtx.pCause = this;
-	DamageCtx.Attacker = m_Source;
+	SDamageCtx DamageCtx(pHit,
+			m_pDesc,
+			m_pEnhancements,
+			m_Source,
+			this,
+			AngleMod(iHitDir + mathRandom(0, 30) - 15),
+			vHitPos);
 
 	return pHit->Damage(DamageCtx);
 	}
@@ -824,7 +818,7 @@ void CContinuousBeam::PaintSegment (CG32bitImage &Dest, const CVector &vFrom, co
 	Dest.DrawLine(xFrom, yFrom, xTo, yTo, 2, CG32bitPixel(255, 255, 0));
 	}
 
-bool CContinuousBeam::PointInObject (const CVector &vObjPos, const CVector &vPointPos)
+bool CContinuousBeam::PointInObject (const CVector &vObjPos, const CVector &vPointPos) const
 
 //	PointInObject
 //

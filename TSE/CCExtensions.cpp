@@ -379,7 +379,11 @@ ICCItem *fnStationType (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData);
 
 ICCItem *fnSystemCreate (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData);
 
-ICCItem *fnRollDice (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData);
+#define FN_ROLL_DICE					1
+#define FN_ROLL_CHANCE					2
+
+ICCItem *fnRollDice (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData);
+
 ICCItem *fnSystemCreateEffect (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData);
 ICCItem *fnSystemCreateMarker (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData);
 ICCItem *fnSystemCreateShip (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData);
@@ -472,6 +476,7 @@ ICCItem *fnSystemAddStationTimerEvent (CEvalContext *pEvalCtx, ICCItem *pArgs, D
 #define FN_SYS_HIT_TEST					35
 #define FN_SYS_GET_POV					36
 #define FN_SYS_ITEM_BUY_PRICE			37
+#define FN_SYS_STARGATE_PROPERTY		38
 
 ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData);
 
@@ -787,7 +792,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   0x0800 'installedState  prefix with 'installed' if necessary\n"
 			"   0x1000 'countAlways     always prefix with count\n"
 			"  0x40000 'noDeterminer    no prefix, but pluralize if necessary\n"
-			"  0x80000 'noQuotes        replace double-quotes with single-quotes",
+			"  0x80000 'noQuotes        replace double-quotes with single-quotes\n"
+			" 0x100000 'escapeQuotes    use for dock screens",
 
 			"v*",	0,	},
 
@@ -1016,8 +1022,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"v*",	0, },
 
 		{	"fmtNoun",						fnFormat,		FN_NAME,
-			"(fmtNoun name nameFlags count formatFlags) -> string",
-			"siiv",	0, },
+			"(fmtNoun namePattern [nameFlags] count formatFlags) -> string",
+			"v*iv",	0, },
 
 		{	"fmtNumber",					fnFormat,		FN_NUMBER,
 			"(fmtNumber [type] value) -> string\n\n"
@@ -1026,6 +1032,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			
 			"   'integer\n"
 			"   'power\n"
+			"   'real\n"
 			"   'regenRate\n"
 			"   'speed",
 
@@ -1039,9 +1046,13 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"(fmtVerb verb pluralize) -> string",
 			"sv",	0, },
 
-		{	"rollDice",						fnRollDice,		0,
+		{	"rollChance",					fnRollDice,		FN_ROLL_CHANCE,
+			"(rollChance percentChance [rolls]) -> True/Nil",
+			"n*",	0,	},
+
+		{	"rollDice",						fnRollDice,		FN_ROLL_DICE,
 			"(rollDice count sides [bonus]) -> value",
-			NULL,	PPFLAG_SIDEEFFECTS,	},
+			"ii*",	0,	},
 
 		//	Ship functions
 		//	--------------
@@ -1279,9 +1290,9 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"(shpOrderImmediate ship order [target] [count]) -> True/Nil",
 			"is*",	PPFLAG_SIDEEFFECTS,	},
 
-		{	"shpRechargeShield",			fnShipSetOld,		FN_SHIP_RECHARGE_SHIELD,
-			"(shpRechargeShield ship hpToRecharge) -> True/Nil",
-			NULL,	PPFLAG_SIDEEFFECTS,	},
+		{	"shpRechargeShield",			fnShipSet,		FN_SHIP_RECHARGE_SHIELD,
+			"(shpRechargeShield ship [hpToRecharge]) -> shield hp",
+			"i*",	PPFLAG_SIDEEFFECTS,	},
 
 		{	"shpRefuelFromItem",			fnShipSetOld,		FN_SHIP_REFUEL_FROM_ITEM,
 			"(shpRefuelFromItem ship item) -> True/Nil",
@@ -1438,11 +1449,13 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'GalacticMap\n"
 			"   'FriendlyFireLock\n"
 			"   'LRS\n"
+			"   'MiningComputer\n"
 			"   'ProtectWingmen\n"
 			"   'SRS\n"
 			"   'SRSEnhancer\n"
 			"   'SystemMap\n"
-			"   'TargetingComputer\n\n"
+			"   'TargetingComputer\n"
+			"   'TradingComputer\n\n"
 			
 			"command\n\n"
 			
@@ -1632,6 +1645,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'GalacticMap\n"
 			"   'FriendlyFireLock\n"
 			"   'LRS\n"
+			"   'MiningComputer\n"
 			"   'ProtectWingmen\n"
 			"   'SRS\n"
 			"   'SRSEnhancer\n"
@@ -1869,6 +1883,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'maxSpeed -> in % c\n"
 			"   'openDockingPortCount\n"
 			"   'operatingSpeed -> 'emergency | 'full | 'half | 'quarter\n"
+			"   'playerBlacklisted\n"
 			"   'playerWingman\n"
 			"   'power -> max reactor output in kW\n"
 			"   'powerUse -> current power draw in kW\n"
@@ -1892,6 +1907,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'destNodeID\n"
 			"   'destStargateID\n"
 			"   'dockingPortCount\n"
+			"   'explored -> True if the player has docked with the station\n"
 			"   'hp\n"
 			"   'ignoreFriendlyFire\n"
 			"   'immutable\n"
@@ -2199,6 +2215,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'commsKey key\n"
 			"   'known True|Nil\n"
 			"   'operatingSpeed 'full|'half|'quarter|'emergency\n"
+			"   'playerBlacklisted True|Nil\n"
 			"   'playerWingman True|Nil\n"
 			"   'rotation angle\n"
 			"   'selectedMissile type|item\n"
@@ -2209,8 +2226,9 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 
 			"   'angry True|Nil|ticks\n"
 			"   'barrier True|Nil\n"
-			"   'ignoreFriendlyFire True|Nil\n"
+			"   'explored True|Nil\n"
 			"   'hp hitPoints\n"
+			"   'ignoreFriendlyFire True|Nil\n"
 			"   'immutable True|Nil\n"
 			"   'known True|Nil\n"
 			"   'maxHP hitPoints\n"
@@ -2409,17 +2427,24 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'isRecorded        Mission has been completed and debriefed\n"
 			"   'isSuccess         Mission has succeeded\n"
 			"   'isUnavailable     Mission is unavailable to player\n"
+			"   'maxAppearing      Max number of this type that can exist\n"
 			"   'name              The name of the mission\n"
 			"   'nodeID            ID of the mission's owner system\n"
 			"   'ownerID           ID of the mission's owner object\n"
 			"   'priority          Mission priority\n"
 			"   'summary           A summary description of the mission\n"
+			"   'totalAccepted     Count of this type accepted by player\n"
+			"   'totalExisting     Count of this type currently existing in universe\n"
 			"   'unid              Mission type UNID",
 
 			"is",	0,	},
 
 		{	"msnGetStaticData",				fnObjData,		FN_OBJ_GET_STATIC_DATA,
 			"(msnGetStaticData missionObj attrib) -> data",
+			NULL,	0,	},
+
+		{	"msnGetTypeData",				fnObjData,		FN_OBJ_GET_GLOBAL_DATA,
+			"(msnGetTypeData missionObj attrib) -> data",
 			NULL,	0,	},
 
 		{	"msnIncData",					fnObjData,		FN_OBJ_INCREMENT_DATA,
@@ -2460,6 +2485,10 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 
 			"isv",	PPFLAG_SIDEEFFECTS,	},
 
+		{	"msnSetTypeData",				fnObjData,		FN_OBJ_SET_GLOBAL_DATA,
+			"(msnSetTypeData missionObj attrib data)",
+			NULL,	PPFLAG_SIDEEFFECTS,	},
+
 		{	"msnSetUnavailable",			fnMissionSet,		FN_MISSION_CLOSED,
 			"(msnSetUnavailable missionObj)",
 			"i",	PPFLAG_SIDEEFFECTS,	},
@@ -2476,18 +2505,18 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 		//	----------------
 
 		{	"sysAddEncounterEvent",			fnSystemAddEncounterEvent,	FN_ADD_ENCOUNTER_FROM_GATE,
-			"(sysAddEncounterEvent delay target encounterID gate)\n\n"
+			"(sysAddEncounterEvent delay target encounterID gateObj|pos)\n\n"
 
 			"delay in ticks",
 
-			NULL,	PPFLAG_SIDEEFFECTS,	},
+			"iiiv",	PPFLAG_SIDEEFFECTS,	},
 
 		{	"sysAddEncounterEventAtDist",	fnSystemAddEncounterEvent,	FN_ADD_ENCOUNTER_FROM_DIST,
 			"(sysAddEncounterEventAtDist delay target encounterID distance)\n\n"
 
 			"delay in ticks",
 
-			NULL,	PPFLAG_SIDEEFFECTS,	},
+			"iiii",	PPFLAG_SIDEEFFECTS,	},
 
 		{	"sysAddObjTimerEvent",			fnSystemAddStationTimerEvent,	FN_ADD_TIMER_NORMAL,	
 			"(sysAddObjTimerEvent delay obj event)\n\n"
@@ -2558,8 +2587,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"is",	0,	},
 
 		{	"sysCreateEffect",				fnSystemCreateEffect,	0,
-			"(sysCreateEffect effectID anchorObj pos [rotation]) -> True/Nil",
-			"ivv*",	PPFLAG_SIDEEFFECTS,	},
+			"(sysCreateEffect effectID anchorObj pos [rotation] [params]) -> True/Nil",
+			"vvv*",	PPFLAG_SIDEEFFECTS,	},
 
 		{	"sysCreateEncounter",			fnSystemCreate,		FN_SYS_CREATE_ENCOUNTER,
 			"(sysCreateEncounter unid [options]) -> True/Nil\n\n"
@@ -2649,6 +2678,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			
 			"criteria is a string that must specify one or more of the following categories:\n\n"
 			
+			"   *           Include all categories\n"
 			"   b           Include beams\n"
 			"   G           Include ONLY stargates\n"
 			"   G:xyz;      Include ONLY stargate with ID 'xyz'\n"
@@ -2692,9 +2722,10 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   X           Only objects whose target is the source\n"
 			"   Y           Only objects angry at (or enemies of) the source\n"
 			"   Z           Exclude the player\n"
-			"   +xyz;       Exclude objects without the given attribute\n"
-			"   -xyz;       Exclude objects with the given attribute\n"
-			"   =n          Only objects of level n. You can also use >, <, >=, and <=.\n\n"
+			"   +xyz;       Only objects with attribute 'xyz'\n"
+			"   -xyz;       Exclude objects with attribute 'xyz'\n"
+			"   =n;         Only objects of level n. You can also replace = with >, <, >=, or <=,\n"
+			"				but they need to be escaped in XML.\n\n"
 			
 			"   +/-data:xyz;        Include only/exclude objects with data 'xyz'\n"
 			"   +/-isPlanet:true;   Include only/exclude planets\n"
@@ -2744,8 +2775,15 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			NULL,	0,	},
 
 		{	"sysGetNodes",					fnSystemGet,	FN_SYS_ALL_NODES,
-			"(sysGetNodes) -> list of nodeIDs",
-			NULL,	0,	},
+			"(sysGetNodes [criteria]) -> list of nodeIDs\n\n"
+			
+			"criteria:\n\n"
+			
+			"   knownOnly:True  Only nodes known to player\n"
+			"   maxDist:n       Only nodes n or fewer gates away.\n"
+			"   minDist:n       Only nodes n or more gates away.\n",
+
+			"*",	0,	},
 
 		{	"sysGetObjectByName",			fnSystemGetObjectByName,	0,
 			"(sysGetObjectByName [source] name) -> obj",
@@ -2756,6 +2794,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			
 			"property:\n\n"
 			
+			"   'lastVisitOn       Tick on which player last visited\n"
+			"   'lastVisitSeconds  Game seconds since player last visited\n"
 			"   'level             The level of the system\n"
 			"   'name              The name of the system\n"
 			"   'pos               Node position on map (x y)",
@@ -2789,6 +2829,19 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 		{	"sysGetStargateDestinationNode",	fnSystemGet,	FN_SYS_STARGATE_DESTINATION_NODE,
 			"(sysGetStargateDestinationNode [nodeID] gateID) -> nodeID",
 			"s*",	0,	},
+
+		{	"sysGetStargateProperty",		fnSystemGet,	FN_SYS_STARGATE_PROPERTY,
+			"(sysGetStargateProperty [nodeID] gateID property) -> value\n\n"
+			
+			"property:\n\n"
+			
+			"   'destGateID: Destination gate ID\n"
+			"   'destID: Destination node\n"
+			"   'gateID: ID of this gate\n"
+			"   'nodeID: NodeID of this gate\n"
+			"   'uncharted: True if uncharted\n",
+
+			"ss*",	0,	},
 
 		{	"sysGetStargates",				fnSystemGet,	FN_SYS_STARGATES,
 			"(sysGetStargates [nodeID]) -> list of gateIDs",
@@ -3022,6 +3075,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 
 			"criteria\n\n"
 			
+			"   *                  Include all Types\n"
 			"   a                  AdventureDesc\n"
 			"   b                  ItemTable\n"
 			"   c                  EffectType\n"
@@ -3044,8 +3098,11 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   z                  SystemMap\n"
 			"   $                  EconomyType\n"
 			"\n"
+			"   L:x-y              Only Types of level x to y\n"
 			"   V                  Include virtual types\n"
 			"   +/-{attrib}        Require/exclude types with given attribute\n"
+			"   +/-event:xyz;      Require/exclude types with given event\n"
+			"   +/-isEnemyOf:xyz;  Require/exclude types which are enemy of sovereign\n"
 			"   =n;                Level comparisons (also supports < etc.)",
 
 			"s",	0,	},
@@ -3382,13 +3439,18 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 
 			"criteria\n\n"
 			
+			"   *                  Include all types\n"
 			"   s                  ShipClass\n"
 			"   t                  StationType\n"
 			"   T                  StationType (structure-scale)\n"
+			"\n"
+			"   A                  Active objects only\n"
+			"   K                  Killed objects only\n"
+			"   L:x-y;             Objects of level x to y\n"
 			"   V                  Include virtual objects\n"
-			"   +/-{attrib}        Require/exclude types with given attribute\n\n"
+			"   +/-{attrib}        Require/exclude types with given attribute\n"
 			"   +/-unid:{unid}     Require/exclude types of given unid\n"
-			"   =n;                Level comparisons (also supports < etc.)\n"
+			"   =n;                Level comparisons (also supports < etc.)\n\n"
 
 			"entry\n\n"
 			
@@ -3884,7 +3946,7 @@ ICCItem *fnArmGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			return pCC->CreateInteger(pArmor->GetRepairTech());
 
 		case FN_ARM_IS_RADIATION_IMMUNE:
-			return pCC->CreateBool(pArmor->IsRadiationImmune(CItemCtx(&ArmorItem)));
+			return pCC->CreateBool(pArmor->IsImmune(CItemCtx(&ArmorItem), specialRadiation));
 
 		default:
 			ASSERT(FALSE);
@@ -4168,8 +4230,11 @@ ICCItem *fnDesignGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 	//	The first argument is an UNID
 
-	CDesignType *pType = g_pUniverse->FindDesignType(pArgs->GetElement(0)->GetIntegerValue());
-	if (pType == NULL)
+	CDesignType *pType;
+	if (pArgs->GetElement(0)->IsNil())
+		return pCC->CreateNil();
+
+	else if ((pType = g_pUniverse->FindDesignType(pArgs->GetElement(0)->GetIntegerValue())) == NULL)
 		{
 		if (dwData == FN_DESIGN_GET_PROPERTY 
 				|| pArgs->GetElement(0)->GetIntegerValue() == 0)
@@ -4219,8 +4284,11 @@ ICCItem *fnDesignGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (pObj == NULL)
 				return pCC->CreateNil();
 
+			CString sEvent = pArgs->GetElement(2)->GetStringValue();
+			ICCItem *pData = (pArgs->GetCount() >= 4 ? pArgs->GetElement(3) : NULL);
+
 			ICCItem *pResult;
-			pType->FireObjCustomEvent(pArgs->GetElement(2)->GetStringValue(), pObj, &pResult);
+			pType->FireObjCustomEvent(sEvent, pObj, pData, &pResult);
 			return pResult;
 			}
 
@@ -4238,19 +4306,13 @@ ICCItem *fnDesignGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			return CreateResultFromDataField(*pCC, pType->GetDataField(pArgs->GetElement(1)->GetStringValue()));
 
 		case FN_DESIGN_GET_GLOBAL_DATA:
-			{
-			CString sData = pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue());
-			return pCC->Link(sData, 0, NULL);
-			}
+			return pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_DESIGN_GET_PROPERTY:
 			return pType->GetProperty(*pCtx, pArgs->GetElement(1)->GetStringValue());
 
 		case FN_DESIGN_GET_STATIC_DATA:
-			{
-			CString sData = pType->GetStaticData(pArgs->GetElement(1)->GetStringValue());
-			return pCC->Link(sData, 0, NULL);
-			}
+			return pType->GetStaticData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_DESIGN_GET_XML:
 			{
@@ -4271,10 +4333,7 @@ ICCItem *fnDesignGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			{
 			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
             ICCItem *pValue = (pArgs->GetCount() > 2 ? pArgs->GetElement(2) : NULL);
-
-            ICCItem *pResult;
-            pType->IncGlobalData(sAttrib, pValue, &pResult);
-            return pResult;
+            return pType->IncGlobalData(sAttrib, pValue)->Reference();
 			}
 
 		case FN_DESIGN_MARK_IMAGES:
@@ -4298,8 +4357,7 @@ ICCItem *fnDesignGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (sAttrib.IsBlank())
 				return pCC->CreateNil();
 
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-			pType->SetGlobalData(sAttrib, sData);
+			pType->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			return pCC->CreateTrue();
 			}
 
@@ -4389,7 +4447,7 @@ ICCItem *fnFormat (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			{
 			CString sText = pArgs->GetElement(0)->GetStringValue();
 			ICCItem *pData = (pArgs->GetCount() > 1 ? pArgs->GetElement(1) : NULL);
-			return pCC->CreateString(::ComposePlayerNameString(sText, g_pUniverse->GetPlayerName(), g_pUniverse->GetPlayerGenome(), pData));
+			return pCC->CreateString(CLanguage::Compose(sText, pData));
 			}
 
 		case FN_CURRENCY:
@@ -4427,10 +4485,40 @@ ICCItem *fnFormat (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 		case FN_NAME:
 			{
-			CString sName = pArgs->GetElement(0)->GetStringValue();
-			DWORD dwNameFlags = (DWORD)pArgs->GetElement(1)->GetIntegerValue();
-			int iCount = pArgs->GetElement(2)->GetIntegerValue();
-			DWORD dwFlags = pCtx->AsNameFlags(pArgs->GetElement(3));
+			//	We accept either 3 or 4 arguments
+
+			ICCItem *pName;
+			DWORD dwNameFlags;
+			int iCount;
+			DWORD dwFlags;
+
+			if (pArgs->GetCount() >= 4)
+				{
+				pName = pArgs->GetElement(0);
+				dwNameFlags = (DWORD)pArgs->GetElement(1)->GetIntegerValue();
+				iCount = pArgs->GetElement(2)->GetIntegerValue();
+				dwFlags = pCtx->AsNameFlags(pArgs->GetElement(3));
+				}
+			else
+				{
+				pName = pArgs->GetElement(0);
+				dwNameFlags = 0;
+				iCount = pArgs->GetElement(1)->GetIntegerValue();
+				dwFlags = pCtx->AsNameFlags(pArgs->GetElement(2));
+				}
+
+			//	Get a name pattern or a string.
+
+			CString sName;
+			if (pName->IsSymbolTable())
+				{
+				sName = pName->GetStringAt(CONSTLIT("pattern"));
+				dwNameFlags = pName->GetIntegerAt(CONSTLIT("flags"));
+				}
+			else
+				sName = pName->GetStringValue();
+
+			//	Compose
 
 			return pCC->CreateString(CLanguage::ComposeNounPhrase(sName, iCount, NULL_STR, dwNameFlags, dwFlags));
 			}
@@ -4678,11 +4766,7 @@ ICCItem *fnItemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			}
 
 		case FN_ITEM_DATA:
-			{
-			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
-			pResult = pCC->Link(Item.GetData(sAttrib), 0, NULL);
-			break;
-			}
+			return Item.GetDataAsItem(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_ITEM_IMAGE_DESC:
 			pResult = CreateListFromImage(*pCC, pType->GetImage());
@@ -4744,18 +4828,10 @@ ICCItem *fnItemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			}
 
 		case FN_ITEM_GET_STATIC_DATA:
-			{
-			CString sData = pType->GetStaticData(pArgs->GetElement(1)->GetStringValue());
-			pResult = pCC->Link(sData, 0, NULL);
-			break;
-			}
+			return pType->GetStaticData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_ITEM_GET_GLOBAL_DATA:
-			{
-			CString sData = pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue());
-			pResult = pCC->Link(sData, 0, NULL);
-			break;
-			}
+			return pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_ITEM_GET_TYPE_DATA:
 			{
@@ -4768,10 +4844,7 @@ ICCItem *fnItemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			//	Otherwise, we get global data from the design type
 
 			else
-				{
-				CString sData = pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue());
-				pResult = pCC->Link(sData, 0, NULL);
-				}
+				return pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 			break;
 			}
@@ -4785,8 +4858,7 @@ ICCItem *fnItemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 				break;
 				}
 
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-			pType->SetGlobalData(sAttrib, sData);
+			pType->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			pResult = pCC->CreateTrue();
 			break;
 			}
@@ -5001,12 +5073,11 @@ ICCItem *fnItemSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 		case FN_ITEM_DATA:
 			{
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
 			int iCount = (pArgs->GetCount() > 3 ? Max(0, pArgs->GetElement(3)->GetIntegerValue()) : -1);
 			if (iCount == 0)
 				return pCC->CreateNil();
 
-			Item.SetData(pArgs->GetElement(1)->GetStringValue(), sData);
+			Item.SetData(pArgs->GetElement(1)->GetStringValue(), pArgs->GetElement(2));
 
 			if (iCount != -1)
 				Item.SetCount(iCount);
@@ -5251,40 +5322,28 @@ ICCItem *fnObjData (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 		{
 		case FN_OBJ_GETDATA:
 			{
-			CString sData = pObj->GetData(sAttrib);
-
-			//	For backwards compatibility we reroute rin to the proper place
-
-			if (sData.IsBlank() && pObj->IsPlayer() && strEquals(sAttrib, CONSTLIT("rins")))
-				sData = CEconomyType::RinHackGet(pObj);
-
-			//	Result
-
-			pResult = pCC->Link(sData, 0, NULL);
+			pResult = pObj->GetData(sAttrib)->Reference();
 			pArgs->Discard(pCC);
 			break;
 			}
 
 		case FN_OBJ_GET_STATIC_DATA:
 			{
-			CString sData = pObj->GetStaticData(sAttrib);
-			pResult = pCC->Link(sData, 0, NULL);
+			pResult = pObj->GetStaticData(sAttrib)->Reference();
 			pArgs->Discard(pCC);
 			break;
 			}
 
 		case FN_OBJ_GET_STATIC_DATA_FOR_STATION_TYPE:
 			{
-			CString sData = pStationType->GetStaticData(sAttrib);
-			pResult = pCC->Link(sData, 0, NULL);
+			pResult = pStationType->GetStaticData(sAttrib)->Reference();
 			pArgs->Discard(pCC);
 			break;
 			}
 
 		case FN_OBJ_GET_GLOBAL_DATA:
 			{
-			CString sData = pObj->GetGlobalData(sAttrib);
-			pResult = pCC->Link(sData, 0, NULL);
+			pResult = pObj->GetGlobalData(sAttrib)->Reference();
 			pArgs->Discard(pCC);
 			break;
 			}
@@ -5309,17 +5368,7 @@ ICCItem *fnObjData (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 					}
 				}
 #endif
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-
-			//	For backwards compatibility we reroute rin to the proper place
-
-			if (pObj->IsPlayer() && strEquals(sAttrib, CONSTLIT("rins")))
-				CEconomyType::RinHackSet(pObj, sData);
-
-			//	Otherwise, we set the data to the object
-
-			else
-				pObj->SetData(sAttrib, sData);
+			pObj->SetData(sAttrib, pArgs->GetElement(2));
 
 			//	Done
 
@@ -5330,8 +5379,7 @@ ICCItem *fnObjData (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 
 		case FN_OBJ_SET_GLOBAL_DATA:
 			{
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-			pObj->SetGlobalData(sAttrib, sData);
+			pObj->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			pResult = pCC->CreateTrue();
 			pArgs->Discard(pCC);
 			break;
@@ -5339,19 +5387,7 @@ ICCItem *fnObjData (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 
 		case FN_OBJ_INCREMENT_DATA:
 			{
-			//	For backwards compatibility we reroute rin
-
-            if (pObj->GetData(sAttrib).IsBlank() && pObj->IsPlayer() && strEquals(sAttrib, CONSTLIT("rins")))
-				{
-			    int iIncrement = (pArgs->GetCount() > 2 ? pArgs->GetElement(2)->GetIntegerValue() : 1);
-				pResult = pCC->CreateInteger((int)CEconomyType::RinHackInc(pObj, iIncrement));
-				}
-
-            //  Increment
-
-            else
-                pObj->IncData(sAttrib, (pArgs->GetCount() > 2 ? pArgs->GetElement(2) : NULL), &pResult);
-
+			pResult = pObj->IncData(sAttrib, (pArgs->GetCount() > 2 ? pArgs->GetElement(2) : NULL))->Reference();
 			pArgs->Discard(pCC);
 			break;
 			}
@@ -5613,6 +5649,11 @@ ICCItem *fnObjGateTo (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 	CTopologyNode *pNode = g_pUniverse->FindTopologyNode(sNode);
 	if (pNode == NULL)
 		return pCC->CreateError(strPatternSubst(CONSTLIT("Invalid node: %s"), sNode));
+
+	//	Make sure we're allowed to gate
+
+	if (pObj->IsPlayer() && !pObj->OnGateCheck(pNode, sEntryPoint, NULL))
+		return pCC->CreateNil();
 
 	//	Effect
 
@@ -6160,19 +6201,20 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			//	After the call to pObj->Damage we must consider that pObj might
 			//	be destroyed (though not freed)
 
-			SDamageCtx Ctx;
-			Ctx.pObj = pObj;
-			Ctx.pDesc = pDesc;
-			Ctx.Damage = pDesc->GetDamage();
-			Ctx.iDirection = AngleMod(iDir + mathRandom(0, 30) - 15);
-			Ctx.vHitPos = vHitPos;
-			Ctx.Attacker = GetDamageSourceArg(*pCC, pArgs->GetElement(2));
-			Ctx.pCause = Ctx.Attacker.GetObj();
-			Ctx.bNoHitEffect = bNoHitEffect;
-			Ctx.bIgnoreOverlays = bIgnoreOverlays;
-			Ctx.bIgnoreShields = bIgnoreShields;
+			CDamageSource Attacker = GetDamageSourceArg(*pCC, pArgs->GetElement(2));
+			SDamageCtx DamageCtx(pObj,
+					pDesc,
+					NULL,
+					Attacker,
+					Attacker.GetObj(),
+					AngleMod(iDir + mathRandom(0, 30) - 15),
+					vHitPos);
 
-			EDamageResults result = pObj->Damage(Ctx);
+			DamageCtx.bNoHitEffect = bNoHitEffect;
+			DamageCtx.bIgnoreOverlays = bIgnoreOverlays;
+			DamageCtx.bIgnoreShields = bIgnoreShields;
+
+			EDamageResults result = pObj->Damage(DamageCtx);
 
 			//	Create fragments
 
@@ -6180,11 +6222,11 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 				{
 				SShotCreateCtx FragCtx;
 				FragCtx.pDesc = pDesc;
-				FragCtx.Source = Ctx.Attacker;
+				FragCtx.Source = DamageCtx.Attacker;
 				FragCtx.pTarget = (!pObj->IsDestroyed() ? pObj : NULL);
 				FragCtx.vPos = vHitPos;
 
-				pSystem->CreateWeaponFragments(FragCtx, Ctx.pCause);
+				pSystem->CreateWeaponFragments(FragCtx, DamageCtx.pCause);
 				}
 
 			//	No need to expose the concept of passthrough
@@ -6203,10 +6245,10 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 				ICCItem *pResult = pCC->CreateSymbolTable();
 
 				pResult->SetStringAt(*pCC, CONSTLIT("result"), GetDamageResultsName(result));
-				pResult->SetIntegerAt(*pCC, CONSTLIT("armorSeg"), Ctx.iSectHit);
-				pResult->SetIntegerAt(*pCC, CONSTLIT("overlayHitDamage"), Ctx.iOverlayHitDamage);
-				pResult->SetIntegerAt(*pCC, CONSTLIT("shieldHitDamage"), Ctx.iShieldHitDamage);
-				pResult->SetIntegerAt(*pCC, CONSTLIT("armorHitDamage"), Ctx.iArmorHitDamage);
+				pResult->SetIntegerAt(*pCC, CONSTLIT("armorSeg"), DamageCtx.iSectHit);
+				pResult->SetIntegerAt(*pCC, CONSTLIT("overlayHitDamage"), DamageCtx.iOverlayHitDamage);
+				pResult->SetIntegerAt(*pCC, CONSTLIT("shieldHitDamage"), DamageCtx.iShieldHitDamage);
+				pResult->SetIntegerAt(*pCC, CONSTLIT("armorHitDamage"), DamageCtx.iArmorHitDamage);
 
 				return pResult;
 				}
@@ -6321,8 +6363,7 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (pCharacter == NULL)
 				return pCC->CreateNil();
 
-			CString sData = pCharacter->GetGlobalData(pArgs->GetElement(1)->GetStringValue());
-			return pCC->Link(sData, 0, NULL);
+			return pCharacter->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 			}
 
 		case FN_OBJ_GET_DETECT_RANGE:
@@ -6460,8 +6501,7 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			{
 			DWORD dwID = (DWORD)pArgs->GetElement(1)->GetIntegerValue();
 			CString sAttrib = pArgs->GetElement(2)->GetStringValue();
-			CString sData = pObj->GetOverlayData(dwID, sAttrib);
-			return pCC->Link(sData, 0, NULL);
+			return pObj->GetOverlayData(dwID, sAttrib)->Reference();
 			}
 
 		case FN_OBJ_GET_OVERLAY_POS:
@@ -6767,9 +6807,7 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
             if (pOverlays == NULL)
                 return pCC->CreateNil();
 
-            ICCItem *pResult;
-            pOverlays->IncData(dwID, sAttrib, (pArgs->GetCount() > 3 ? pArgs->GetElement(3) : NULL), &pResult);
-            return pResult;
+            return pOverlays->IncData(dwID, sAttrib, (pArgs->GetCount() > 3 ? pArgs->GetElement(3) : NULL))->Reference();
 			}
 
 		case FN_OBJ_IS_ANGRY_AT:
@@ -6805,10 +6843,9 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			CSpaceObject *pSource = CreateObjFromItem(*pCC, pArgs->GetElement(1));
 
 			CString sFilter = pArgs->GetElement(2)->GetStringValue();
-			CSpaceObject::Criteria Criteria;
-			CSpaceObject::ParseCriteria(pSource, sFilter, &Criteria);
+			CSpaceObjectCriteria Criteria(pSource, sFilter);
 
-			CSpaceObject::SCriteriaMatchCtx Ctx(Criteria);
+			CSpaceObjectCriteria::SCtx Ctx(Criteria);
 			return pCC->CreateBool(pObj->MatchesCriteria(Ctx, Criteria));
 			}
 
@@ -6850,9 +6887,8 @@ ICCItem *fnObjGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			{
 			DWORD dwID = (DWORD)pArgs->GetElement(1)->GetIntegerValue();
 			CString sAttrib = pArgs->GetElement(2)->GetStringValue();
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(3));
 
-			pObj->SetOverlayData(dwID, sAttrib, sData);
+			pObj->SetOverlayData(dwID, sAttrib, pArgs->GetElement(3));
 			return pCC->CreateTrue();
 			}
 
@@ -7868,9 +7904,7 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 		case FN_OBJ_FIX_PARALYSIS:
 			{
-			CShip *pShip = pObj->AsShip();
-			if (pShip)
-				pShip->ClearParalyzed();
+			pObj->ClearCondition(CConditionSet::cndParalyzed);
 			return pCC->CreateTrue();
 			}
 
@@ -8159,8 +8193,7 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (sAttrib.IsBlank())
 				return pCC->CreateNil();
 
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-			pCharacter->SetGlobalData(sAttrib, sData);
+			pCharacter->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			return pCC->CreateTrue();
 			}
 
@@ -8199,8 +8232,6 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			//	Get the attribute
 
 			CString sAttrib = pArgs->GetElement(2)->GetStringValue();
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(3));
-
 			int iCount = (pArgs->GetCount() > 4 ? Max(0, pArgs->GetElement(4)->GetIntegerValue()) : 1);
 
 			//	Select the item
@@ -8216,7 +8247,7 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 			//	Set the data
 
-			ItemList.SetDataAtCursor(sAttrib, sData, iCount);
+			ItemList.SetDataAtCursor(sAttrib, pArgs->GetElement(3), iCount);
 
 			//	Update the object
 
@@ -8449,8 +8480,7 @@ ICCItem *fnObjSetOld (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 			int iTime = pArgs->GetElement(1)->GetIntegerValue();
 			pArgs->Discard(pCC);
 
-			pObj->MakeParalyzed(iTime);
-
+			pObj->SetCondition(CConditionSet::cndParalyzed, iTime);
 			pResult = pCC->CreateTrue();
 			break;
 			}
@@ -9025,7 +9055,7 @@ ICCItem *fnResourceGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 	return pCC->CreateNil();
 	}
 
-ICCItem *fnRollDice (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
+ICCItem *fnRollDice (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 //	fnRollDice
 //
@@ -9033,28 +9063,48 @@ ICCItem *fnRollDice (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
 
 	{
 	CCodeChain *pCC = pEvalCtx->pCC;
-	ICCItem *pArgs;
+	CCodeChainCtx *pCtx = (CCodeChainCtx *)pEvalCtx->pExternalCtx;
+	if (pCtx == NULL)
+		return pCC->CreateError(ERR_NO_CODE_CHAIN_CTX);
 
-	//	Evaluate the arguments and validate them
+	switch (dwData)
+		{
+		case FN_ROLL_CHANCE:
+			{
+			Metric rProb = pArgs->GetElement(0)->GetDoubleValue() / 100.0;
+			
+			//	If we're trying multiple times, then we adjust the probability
 
-	pArgs = pCC->EvaluateArgs(pEvalCtx, pArguments, CONSTLIT("ii*"));
-	if (pArgs->IsError())
-		return pArgs;
+			if (pArgs->GetCount() > 1)
+				{
+				Metric rRolls = pArgs->GetElement(1)->GetDoubleValue();
+				if (rRolls <= 0.0)
+					return pCC->CreateError(CONSTLIT("Number of rolls must be positive."), pArgs->GetElement(1));
 
-	//	Arguments
+				rProb = 1.0 - pow(1.0 - rProb, rRolls);
+				}
 
-	int iCount = pArgs->GetElement(0)->GetIntegerValue();
-	int iFaces = pArgs->GetElement(1)->GetIntegerValue();
-	int iBonus = 0;
-	if (pArgs->GetElement(2))
-		iBonus = pArgs->GetElement(2)->GetIntegerValue();
+			//	Roll
 
-	pArgs->Discard(pCC);
+			return pCC->CreateBool(mathRandomDouble() <= rProb);
+			}
 
-	//	Roll Dice
+		case FN_ROLL_DICE:
+			{
+			int iCount = pArgs->GetElement(0)->GetIntegerValue();
+			int iFaces = pArgs->GetElement(1)->GetIntegerValue();
+			int iBonus = 0;
+			if (pArgs->GetElement(2))
+				iBonus = pArgs->GetElement(2)->GetIntegerValue();
 
-	DiceRange Dice(iFaces, iCount, iBonus);
-	return pCC->CreateInteger(Dice.Roll());
+			DiceRange Dice(iFaces, iCount, iBonus);
+			return pCC->CreateInteger(Dice.Roll());
+			}
+
+		default:
+			ASSERT(false);
+			return pCC->CreateNil();
+		}
 	}
 
 ICCItem *fnShipClass (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
@@ -9105,12 +9155,7 @@ ICCItem *fnShipClass (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			break;
 
 		case FN_SHIP_GET_GLOBAL_DATA:
-			{
-			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
-			CString sData = pClass->GetGlobalData(sAttrib);
-			pResult = pCC->Link(sData, 0, NULL);
-			break;
-			}
+			return pClass->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_SHIP_GET_IMAGE_DESC:
 			{
@@ -9142,9 +9187,7 @@ ICCItem *fnShipClass (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 		case FN_SHIP_SET_GLOBAL_DATA:
 			{
 			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-
-			pClass->SetGlobalData(sAttrib, sData);
+			pClass->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			pResult = pCC->CreateTrue();
 			break;
 			}
@@ -9240,10 +9283,10 @@ ICCItem *fnShipGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 				if (Item.IsInstalled())
 					pInstalled = pShip->GetArmorSection(Item.GetInstalled());
 
-				return pCC->CreateBool(pArmor->IsRadiationImmune(CItemCtx(pShip, pInstalled)));
+				return pCC->CreateBool(pArmor->IsImmune(CItemCtx(pShip, pInstalled), specialRadiation));
 				}
 			else
-				return pCC->CreateBool(pShip->IsRadiationImmune());
+				return pCC->CreateBool(pShip->IsImmuneTo(CConditionSet::cndRadioactive));
 			break;
 			}
 
@@ -9393,12 +9436,12 @@ ICCItem *fnShipGetOld (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData
 			break;
 
 		case FN_SHIP_DECONTAMINATE:
-			pShip->Decontaminate();
+			pShip->ClearCondition(CConditionSet::cndRadioactive);
 			pResult = pCC->CreateTrue();
 			break;
 
 		case FN_SHIP_MAKE_RADIOACTIVE:
-			pShip->MakeRadioactive();
+			pShip->SetCondition(CConditionSet::cndRadioactive);
 			pResult = pCC->CreateTrue();
 			break;
 
@@ -9557,6 +9600,7 @@ ICCItem *fnShipSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			else
 				{
 				CString sNewValue = pShip->SetAISettingString(sSetting, (pValue->IsNil() ? NULL_STR : pValue->GetStringValue()));
+				pShip->UpdateNoFriendlyFire();
 				if (sNewValue.IsBlank())
 					return pCC->CreateNil();
 				else
@@ -9772,6 +9816,11 @@ ICCItem *fnShipSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 			pShip->InstallItemAsDevice(ItemList, iDeviceSlot, iSlotPosIndex);
 
+			//	Make sure the cursor is still valid
+
+			if (!ItemList.IsCursorValid())
+				return pCC->CreateError(CONSTLIT("Installation did not preserve cursor."));
+
 			//	Done
 
 			return CreateListFromItem(*pCC, ItemList.GetItemAtCursor());
@@ -9886,6 +9935,28 @@ ICCItem *fnShipSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			bool bIsWingman = (pArgs->GetCount() > 1 ? !pArgs->GetElement(1)->IsNil() : true);
 			pShip->SetPlayerWingman(bIsWingman);
 			return pCC->CreateTrue();
+			}
+
+		case FN_SHIP_RECHARGE_SHIELD:
+			{
+			CInstalledDevice *pShield = pShip->GetNamedDevice(devShields);
+			if (pShield == NULL)
+				return pCC->CreateNil();
+
+			CItemCtx ItemCtx(pShip, pShield);
+
+			//	If no second argument then we always recharge to full
+
+			int iHPToRecharge;
+			if (pArgs->GetCount() < 2)
+				pShield->GetHitPoints(ItemCtx, &iHPToRecharge);
+			else
+				iHPToRecharge = pArgs->GetElement(1)->GetIntegerValue();
+
+			//	Recharge and return new HPs
+
+			pShield->Recharge(pShip, iHPToRecharge);
+			return pCC->CreateInteger(pShield->GetHitPoints(ItemCtx));
 			}
 
 		case FN_SHIP_REPAIR_ITEM:
@@ -10385,22 +10456,6 @@ ICCItem *fnShipSetOld (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData
 			break;
 			}
 
-		case FN_SHIP_RECHARGE_SHIELD:
-			{
-			int iHP = pArgs->GetElement(1)->GetIntegerValue();
-			pArgs->Discard(pCC);
-
-			CInstalledDevice *pShield = pShip->GetNamedDevice(devShields);
-			if (pShield == NULL)
-				pResult = pCC->CreateNil();
-			else
-				{
-				pShield->Recharge(pShip, iHP);
-				pResult = pCC->CreateTrue();
-				}
-			break;
-			}
-
 		case FN_SHIP_ITEM_CHARGES:
 			{
 			CItemListManipulator *pItemList = NULL;
@@ -10541,7 +10596,7 @@ ICCItem *fnSovereignSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			CSovereign *pTarget = g_pUniverse->FindSovereign(dwTargetID);
 			if (pTarget == NULL)
 				return pCC->CreateError(CONSTLIT("Invalid sovereign"), pArgs->GetElement(1));
-			
+
 			CSovereign::Disposition iDisp;
 			if (pArgs->GetElement(2)->IsInteger())
 				iDisp = (CSovereign::Disposition)pArgs->GetElement(2)->GetIntegerValue();
@@ -10901,19 +10956,12 @@ ICCItem *fnStationType (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			}
 
 		case FN_STATION_GET_GLOBAL_DATA:
-			{
-			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
-			CString sData = pType->GetGlobalData(sAttrib);
-			pResult = pCC->Link(sData, 0, NULL);
-			break;
-			}
+			return pType->GetGlobalData(pArgs->GetElement(1)->GetStringValue())->Reference();
 
 		case FN_STATION_SET_GLOBAL_DATA:
 			{
 			CString sAttrib = pArgs->GetElement(1)->GetStringValue();
-			CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(2));
-
-			pType->SetGlobalData(sAttrib, sData);
+			pType->SetGlobalData(sAttrib, pArgs->GetElement(2));
 			pResult = pCC->CreateTrue();
 			break;
 			}
@@ -10925,7 +10973,7 @@ ICCItem *fnStationType (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 	return pResult;
 	}
 
-ICCItem *fnSystemAddEncounterEvent (CEvalContext *pEvalCtx, ICCItem *pArguments, DWORD dwData)
+ICCItem *fnSystemAddEncounterEvent (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 //	fnSystemAddEncounterEvent
 //
@@ -10933,23 +10981,13 @@ ICCItem *fnSystemAddEncounterEvent (CEvalContext *pEvalCtx, ICCItem *pArguments,
 
 	{
 	CCodeChain *pCC = pEvalCtx->pCC;
-	ICCItem *pArgs;
-
-	//	Evaluate the arguments and validate them
-
-	pArgs = pCC->EvaluateArgs(pEvalCtx, pArguments, CONSTLIT("iiii"));
-	if (pArgs->IsError())
-		return pArgs;
 
 	//	Arguments
 
 	int iTime = pArgs->GetElement(0)->GetIntegerValue();
 	CSpaceObject *pTarget = CreateObjFromItem(*pCC, pArgs->GetElement(1));
 	if (pTarget == NULL)
-		{
-		pArgs->Discard(pCC);
 		return pCC->CreateNil();
-		}
 
 	DWORD dwEncounterID = (DWORD)pArgs->GetElement(2)->GetIntegerValue();
 
@@ -10957,14 +10995,16 @@ ICCItem *fnSystemAddEncounterEvent (CEvalContext *pEvalCtx, ICCItem *pArguments,
 
 	int iDistance = 0;
 	CSpaceObject *pGate = NULL;
+	CVector vPos;
 
 	if (dwData == FN_ADD_ENCOUNTER_FROM_DIST)
 		iDistance =	pArgs->GetElement(3)->GetIntegerValue();
 	else
-		pGate = CreateObjFromItem(*pCC, pArgs->GetElement(3));
+		{
+		if (::GetPosOrObject(pEvalCtx, pArgs->GetElement(3), &vPos, &pGate) != NOERROR)
+			return pCC->CreateError(CONSTLIT("Invalid pos"), pArgs->GetElement(3));
+		}
 	
-	pArgs->Discard(pCC);
-
 	//	Create the event
 
 	CSystem *pSystem = g_pUniverse->GetCurrentSystem();
@@ -10976,6 +11016,7 @@ ICCItem *fnSystemAddEncounterEvent (CEvalContext *pEvalCtx, ICCItem *pArguments,
 			pTarget,
 			dwEncounterID,
 			pGate,
+			vPos,
 			iDistance * LIGHT_SECOND);
 
 	pSystem->AddTimedEvent(pEvent);
@@ -11348,17 +11389,23 @@ ICCItem *fnSystemCreate (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 			//	Get Parameters to initialize context
 
-			SDamageCtx Ctx;
-			Ctx.pDesc = pDesc;
-			Ctx.pObj = CreateObjFromItem(*pCC, pArgs->GetElement(1));
-			Ctx.vHitPos = CreateVectorFromList(*pCC, pArgs->GetElement(2));
-			Ctx.iDirection = pArgs->GetElement(3)->GetIntegerValue();
-			Ctx.Damage = pDesc->GetDamage();
-			Ctx.iDamage = pArgs->GetElement(4)->GetIntegerValue();
+			CSpaceObject *pObj = CreateObjFromItem(*pCC, pArgs->GetElement(1));
+			CVector vHitPos = CreateVectorFromList(*pCC, pArgs->GetElement(2));
+			int iDir = pArgs->GetElement(3)->GetIntegerValue();
+
+			SDamageCtx DamageCtx(pObj,
+					pDesc,
+					NULL,
+					CDamageSource(),
+					NULL,
+					iDir,
+					vHitPos);
+
+			DamageCtx.iDamage = pArgs->GetElement(4)->GetIntegerValue();
 
 			//	Create the effect
 
-			pDesc->CreateHitEffect(pSystem, Ctx);
+			pDesc->CreateHitEffect(pSystem, DamageCtx);
 			return pCC->CreateTrue();
 			}
 
@@ -11650,7 +11697,7 @@ ICCItem *fnSystemCreateEffect (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwD
 
 //	fnSystemCreateEffect
 //
-//	(sysCreateEffect effectID anchor pos [rotation] [variant])
+//	(sysCreateEffect effectID anchor pos [rotation] [variant] [data])
 
 	{
 	ALERROR error;
@@ -11659,21 +11706,49 @@ ICCItem *fnSystemCreateEffect (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwD
 
 	//	Get the arguments
 
-	DWORD dwUNID = pArgs->GetElement(0)->GetIntegerValue();
-	CSpaceObject *pAnchor = CreateObjFromItem(*pCC, pArgs->GetElement(1));
+	int iArg = 0;
+	ICCItem *pEffectType = pArgs->GetElement(iArg++);
+	CSpaceObject *pAnchor = CreateObjFromItem(*pCC, pArgs->GetElement(iArg++));
 
 	CVector vPos;
-	if (GetPosOrObject(pEvalCtx, pArgs->GetElement(2), &vPos) != NOERROR)
+	if (GetPosOrObject(pEvalCtx, pArgs->GetElement(iArg++), &vPos) != NOERROR)
 		return pCC->CreateError(CONSTLIT("Invalid pos"), pArgs->GetElement(2));
 
-	int iRotation = (pArgs->GetCount() > 3 ? pArgs->GetElement(3)->GetIntegerValue() : 0);
-	int iVariant = (pArgs->GetCount() > 4 ? pArgs->GetElement(4)->GetIntegerValue() : 0);
+	int iRotation = 0;
+	int iVariant = 0;
+	ICCItem *pData = NULL;
 
-	//	Validate
+	if (pArgs->GetCount() > 3)
+		{
+		if (pArgs->GetElement(iArg)->IsSymbolTable())
+			pData = pArgs->GetElement(iArg++);
+		else
+			{
+			iRotation = pArgs->GetElement(iArg++)->GetIntegerValue();
 
-	CEffectCreator *pCreator = g_pUniverse->FindEffectType(dwUNID);
+			if (pArgs->GetCount() > 4)
+				{
+				if (pArgs->GetElement(iArg)->IsSymbolTable())
+					pData = pArgs->GetElement(iArg++);
+				else
+					{
+					iVariant = pArgs->GetElement(iArg++)->GetIntegerValue();
+
+					if (pArgs->GetCount() > 5)
+						{
+						if (pArgs->GetElement(iArg)->IsSymbolTable())
+							pData = pArgs->GetElement(iArg++);
+						}
+					}
+				}
+			}
+		}
+
+	//	Get the effect type
+
+	CEffectCreator *pCreator = g_pUniverse->FindEffectType(pEffectType->GetIntegerValue());
 	if (pCreator == NULL)
-		return pCC->CreateError(CONSTLIT("Unknown effect ID"), pArgs->GetElement(0));
+		return pCC->CreateError(CONSTLIT("Unknown effect type"), pEffectType);
 
 	//	Create
 
@@ -11686,7 +11761,8 @@ ICCItem *fnSystemCreateEffect (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwD
 			vPos,
 			NullVector,
 			iRotation,
-			iVariant))
+			iVariant,
+			pData))
 		return pCC->CreateError(CONSTLIT("Error creating effect"), pCC->CreateInteger(error));
 
 	//	Done
@@ -12067,7 +12143,11 @@ ICCItem *fnSystemCreateStation (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dw
 			if (pNode == NULL)
 				return pCC->CreateError(CONSTLIT("No topology for current system"), NULL);
 
-			if (pNode->AddStargateAndReturn(sStargateName, sDestNode, sDestName) != NOERROR)
+			CTopologyNode::SStargateDesc GateDesc;
+			GateDesc.sName = sStargateName;
+			GateDesc.sDestNode = sDestNode;
+			GateDesc.sDestName = sDestName;
+			if (pNode->AddStargateAndReturn(GateDesc) != NOERROR)
 				return pCC->CreateError(CONSTLIT("Unable to add stargate to topology node"), NULL);
 
 			pDestNode = g_pUniverse->FindTopologyNode(sDestNode);
@@ -12116,31 +12196,33 @@ ICCItem *fnSystemFind (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 	//	Second argument is the filter
 
 	CString sFilter = pArgs->GetElement(1)->GetStringValue();
-	CSpaceObject::Criteria Criteria;
-	CSpaceObject::ParseCriteria(pSource, sFilter, &Criteria);
+	CSpaceObjectCriteria Criteria(pSource, sFilter);
 
 	//	If we're checking for position, we need to do some extra work
 
 	if (dwData == FN_SYS_FIND_AT_POS)
 		{
-		if (GetPosOrObject(pEvalCtx, pArgs->GetElement(2), &Criteria.vPos1) != NOERROR)
+		CVector vPos1;
+		CVector vPos2;
+
+		if (GetPosOrObject(pEvalCtx, pArgs->GetElement(2), &vPos1) != NOERROR)
 			return pCC->CreateError(CONSTLIT("Invalid position"), pArgs->GetElement(2));
 
 		//	If we have two position parameters, then this is a line intersection
 
 		if (pArgs->GetCount() >= 4)
 			{
-			if (GetPosOrObject(pEvalCtx, pArgs->GetElement(3), &Criteria.vPos2) != NOERROR)
+			if (GetPosOrObject(pEvalCtx, pArgs->GetElement(3), &vPos2) != NOERROR)
 				return pCC->CreateError(CONSTLIT("Invalid position"), pArgs->GetElement(3));
 
-			Criteria.iPosCheck = CSpaceObject::checkLineIntersect;
+			Criteria.SetLineIntersect(vPos1, vPos2);
 			}
 
 		//	Otherwise, just a point intersection
 
 		else
 			{
-			Criteria.iPosCheck = CSpaceObject::checkPosIntersect;
+			Criteria.SetPosIntersect(vPos1);
 			}
 		}
 
@@ -12154,7 +12236,7 @@ ICCItem *fnSystemFind (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 	
 	ICCItem *pResult;
 	CCLinkedList *pList;
-	if (!Criteria.bNearestOnly && !Criteria.bFarthestOnly)
+	if (!Criteria.MatchesNearestOnly() && !Criteria.MatchesFarthestOnly())
 		{
 		pResult = pCC->CreateLinkedList();
 		if (pResult->IsError())
@@ -12172,11 +12254,11 @@ ICCItem *fnSystemFind (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 	//	NOTE: We have this convoluted code path because we want to optimize
 	//	adding items to our list [not sure if it's worth it, though].
 
-	bool bGenerateOurOwnList = (pList && (Criteria.iSort == CSpaceObject::sortNone));
+	bool bGenerateOurOwnList = (pList && (Criteria.GetSort() == CSpaceObjectCriteria::sortNone));
 
 	//	Do the search
 
-	CSpaceObject::SCriteriaMatchCtx Ctx(Criteria);
+	CSpaceObjectCriteria::SCtx Ctx(Criteria);
 	for (i = 0; i < pSystem->GetObjectCount(); i++)
 		{
 		CSpaceObject *pObj = pSystem->GetObject(i);
@@ -12195,7 +12277,7 @@ ICCItem *fnSystemFind (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 	//	If we only want the nearest/farthest object, then find it now
 
-	if (Criteria.bNearestOnly || Criteria.bFarthestOnly)
+	if (Criteria.MatchesNearestOnly() || Criteria.MatchesFarthestOnly())
 		{
 		//	Return the object
 
@@ -12255,14 +12337,15 @@ ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (pNode == NULL)
 				return pCC->CreateError(CONSTLIT("Invalid nodeID"), pArgs->GetElement(0));
 
-			CString sGateID = pArgs->GetElement(iArg++)->GetStringValue();
-			CString sDestNodeID = pArgs->GetElement(iArg++)->GetStringValue();
-			CString sDestGateID = pArgs->GetElement(iArg++)->GetStringValue();
+			CTopologyNode::SStargateDesc GateDesc;
+			GateDesc.sName = pArgs->GetElement(iArg++)->GetStringValue();
+			GateDesc.sDestNode = pArgs->GetElement(iArg++)->GetStringValue();
+			GateDesc.sDestName = pArgs->GetElement(iArg++)->GetStringValue();
 
-			if (pNode->FindStargate(sGateID))
+			if (pNode->FindStargate(GateDesc.sName))
 				return pCC->CreateNil();
 
-			if (pNode->AddStargateAndReturn(sGateID, sDestNodeID, sDestGateID) != NOERROR)
+			if (pNode->AddStargateAndReturn(GateDesc) != NOERROR)
 				return pCC->CreateError(CONSTLIT("Unable to add stargate"), pArgs);
 
 			return pCC->CreateTrue();
@@ -12701,9 +12784,7 @@ ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 			//	Increment
 
-			ICCItem *pResult;
-			pNode->IncData(sAttrib, pInc, &pResult);
-			return pResult;
+			return pNode->IncData(sAttrib, pInc)->Reference();
 			}
 
 		case FN_SYS_GET_DATA:
@@ -12740,11 +12821,10 @@ ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			//	Do it
 
 			if (dwData == FN_SYS_GET_DATA)
-				return pCC->Link(pNode->GetData(sAttrib), 0, NULL);
+				return pNode->GetData(sAttrib)->Reference();
 			else
 				{
-				CString sData = CreateDataFromItem(*pCC, pArgs->GetElement(iArg));
-				pNode->SetData(sAttrib, sData);
+				pNode->SetData(sAttrib, pArgs->GetElement(iArg));
 				return pCC->CreateTrue();
 				}
 			}
@@ -13047,6 +13127,31 @@ ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			return pCC->CreateString(sDestNode);
 			}
 
+		case FN_SYS_STARGATE_PROPERTY:
+			{
+			int iArg = 0;
+
+			CTopologyNode *pNode;
+			if (pArgs->GetCount() > 2)
+				{
+				pNode = g_pUniverse->FindTopologyNode(pArgs->GetElement(iArg++)->GetStringValue());
+				if (pNode == NULL)
+					return pCC->CreateError(CONSTLIT("Invalid nodeID"), pArgs->GetElement(0));
+				}
+			else
+				{
+				pNode = g_pUniverse->GetCurrentTopologyNode();
+				if (pNode == NULL)
+					return pCC->CreateNil();
+				}
+
+			CString sGateID = pArgs->GetElement(iArg++)->GetStringValue();
+			CString sProperty = pArgs->GetElement(iArg++)->GetStringValue();
+
+			ICCItemPtr pResult = pNode->GetStargateProperty(sGateID, sProperty);
+			return pResult->Reference();
+			}
+
 		case FN_SYS_TOPOLOGY_DISTANCE:
 			{
 			CString sSource = pArgs->GetElement(0)->GetStringValue();
@@ -13131,25 +13236,57 @@ ICCItem *fnSystemGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 		case FN_SYS_ALL_NODES:
 			{
+			int i;
+
 			//	Create a list
 
 			ICCItem *pResult = pCC->CreateLinkedList();
 			if (pResult->IsError())
 				return pResult;
 
-			CCLinkedList *pList = (CCLinkedList *)pResult;
+			//	If we have no parameters, then we return all nodes
 
-			//	Loop over all topology nodes and add the IDs to the list
-
-			for (int i = 0; i < g_pUniverse->GetTopologyNodeCount(); i++)
+			if (pArgs->GetCount() == 0)
 				{
-				CTopologyNode *pNode = g_pUniverse->GetTopologyNode(i);
-				if (pNode->IsEndGame())
-					continue;
+				//	Loop over all topology nodes and add the IDs to the list
 
-				ICCItem *pValue = pCC->CreateString(pNode->GetID());
-				pList->Append(*pCC, pValue);
-				pValue->Discard(pCC);
+				for (i = 0; i < g_pUniverse->GetTopologyNodeCount(); i++)
+					{
+					CTopologyNode *pNode = g_pUniverse->GetTopologyNode(i);
+					if (pNode->IsEndGame())
+						continue;
+
+					pResult->AppendString(*pCC, pNode->GetID());
+					}
+				}
+
+			//	Otherwise, we expect a criteria parameter
+
+			else
+				{
+				ICCItem *pCriteria = pArgs->GetElement(0);
+				CTopologyNode::SCriteria Criteria;
+
+				CString sError;
+				if (CTopologyNode::ParseCriteria(pCriteria, Criteria, &sError) != NOERROR)
+					return pCC->CreateError(sError, pCriteria);
+
+				//	Loop
+
+				CTopologyNode::SCriteriaCtx Ctx;
+				CTopologyNode::InitCriteriaCtx(Ctx, Criteria);
+
+				for (i = 0; i < g_pUniverse->GetTopologyNodeCount(); i++)
+					{
+					CTopologyNode *pNode = g_pUniverse->GetTopologyNode(i);
+					if (pNode->IsEndGame())
+						continue;
+
+					if (!pNode->MatchesCriteria(Ctx, Criteria))
+						continue;
+
+					pResult->AppendString(*pCC, pNode->GetID());
+					}
 				}
 
 			return pResult;
@@ -13357,7 +13494,6 @@ ICCItem *fnSystemVectorMath (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwDat
 //	(sysVectorSubtract vector vector) -> vector
 
 	{
-	int i;
 	CCodeChain *pCC = pEvalCtx->pCC;
 
 	switch (dwData)
@@ -13478,13 +13614,10 @@ ICCItem *fnSystemVectorMath (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwDat
 			if (pArgs->GetCount() > 3)
 				sFilter = pArgs->GetElement(3)->GetStringValue();
 
-			CSpaceObject::Criteria Criteria;
-			CSpaceObject::ParseCriteria(pSource, sFilter, &Criteria);
+			CSpaceObjectCriteria Criteria(pSource, sFilter);
 
 			//	Keep trying random positions until we find something that works
 			//	(or until we run out of tries)
-
-			Metric rMinDist2 = rSeparation * rSeparation;
 
 			int iTries = 100;
 			while (iTries > 0)
@@ -13511,29 +13644,11 @@ ICCItem *fnSystemVectorMath (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwDat
 
 				CVector vTry = vCenter + vOffset;
 
-				//	See if any object is within the separation range
+				//	See if any object is within the separation range. If there 
+				//	is, then we continue.
 
-				CSpaceObject::SCriteriaMatchCtx Ctx(Criteria);
-				bool bTooClose = false;
-				for (i = 0; i < pSystem->GetObjectCount(); i++)
-					{
-					CSpaceObject *pObj = pSystem->GetObject(i);
-					if (pObj 
-							&& pObj->MatchesCriteria(Ctx, Criteria)
-							&& (!pObj->IsIntangible() || pObj->IsVirtual()))
-						{
-						Metric rDist2 = (pObj->GetPos() - vTry).Length2();
-						if (rDist2 < rMinDist2)
-							{
-							bTooClose = true;
-							break;
-							}
-						}
-					}
-
-				//	If we didn't find a good spot, then continue
-
-				if (bTooClose && --iTries > 0)
+				if (pSystem->FindObjectInRange(vTry, rSeparation, Criteria)
+						&& --iTries > 0)
 					continue;
 
 				//	Otherwise, use the vector

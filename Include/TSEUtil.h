@@ -274,62 +274,51 @@ struct SViewportAnnotations
 
 struct SUpdateCtx
 	{
-	SUpdateCtx (void) :
-			pSystem(NULL),
-			pPlayer(NULL),
-			pAnnotations(NULL),
-			pCacheObj(NULL),
-			iLightIntensity(-1),
-			pDockingObj(NULL),
-			bNeedsAutoTarget(false),
-			bPlayerTargetOutOfRange(false),
-			iPlayerPerception(0),
-			pPlayerTarget(NULL),
-			pTargetObj(NULL),
-			rTargetDist2(g_InfiniteDistance * g_InfiniteDistance),
-			iMinFireArc(0),
-			iMaxFireArc(0),
-			bGravityWarning(false),
-			bHasShipBarriers(false),
-			bHasGravity(false)
-		{ }
+	public:
+		int GetLightIntensity (CSpaceObject *pObj) const;
+		inline bool IsTimeStopped (void) const { return m_bTimeStopped; }
+		inline void SetTimeStopped (bool bValue = true) { m_bTimeStopped = bValue; }
 
-	int GetLightIntensity (CSpaceObject *pObj) const;
+		CSystem *pSystem = NULL;					//	Current system
+		CSpaceObject *pPlayer = NULL;				//	The player
+		TArray<CSpaceObject *> PlayerObjs;			//	List of player objects, if pPlayer == NULL
+		SViewportAnnotations *pAnnotations = NULL;	//	Extra structure to deliver to PaintViewport
 
-	CSystem *pSystem;					//	Current system
-	CSpaceObject *pPlayer;				//	The player
-	TArray<CSpaceObject *> PlayerObjs;	//	List of player objects, if pPlayer == NULL
-	SViewportAnnotations *pAnnotations;	//	Extra structure to deliver to PaintViewport
+		//	Used to compute nearest docking port to player
 
-	//	Cached computed values
+		CSpaceObject *pDockingObj = NULL;			//	If non-null, nearest object to dock with
+		int iDockingPort = -1;						//	Nearest docking port
+		CVector vDockingPort;						//	Position of docking port (absolute)
+		Metric rDockingPortDist2 = 0.0;				//	Distance from player to docking port
 
-	mutable CSpaceObject *pCacheObj;	//	Cached values apply to this object.
-	mutable int iLightIntensity;		//	Light intensity at pCacheObj (-1 if not computed).
+		//	Used to compute player's auto target
 
-	//	Used to compute nearest docking port to player
+		bool bNeedsAutoTarget = false;				//	TRUE if player's weapon needs an autotarget
+		bool bPlayerTargetOutOfRange = false;		//	TRUE if player's current target is unreachable
+		int iPlayerPerception = 0;					//	Player's perception
 
-	CSpaceObject *pDockingObj;			//	If non-null, nearest object to dock with
-	int iDockingPort;					//	Nearest docking port
-	CVector vDockingPort;				//	Position of docking port (absolute)
-	Metric rDockingPortDist2;			//	Distance from player to docking port
+		CSpaceObject *pPlayerTarget = NULL;			//	Current player target (may be NULL)
+		CSpaceObject *pTargetObj = NULL;			//	If non-null, nearest possible target for player
+		Metric rTargetDist2 = g_InfiniteDistance2;	//	Distance from player to target
+		int iMinFireArc = 0;						//	Fire arc of primary weapon
+		int iMaxFireArc = 0;
 
-	//	Used to compute player's auto target
+		//	Misc flags
 
-	bool bNeedsAutoTarget;				//	TRUE if player's weapon needs an autotarget
-	bool bPlayerTargetOutOfRange;		//	TRUE if player's current target is unreachable
-	int iPlayerPerception;				//	Player's perception
+		bool bGravityWarning = false;				//	Player in a dangerous gravity field
+		bool bHasShipBarriers = false;				//	TRUE if the system has ship barriers (e.g., Arena)
+		bool bHasGravity = false;					//	TRUE if the system has gravity
 
-	CSpaceObject *pPlayerTarget;		//	Current player target (may be NULL)
-	CSpaceObject *pTargetObj;			//	If non-null, nearest possible target for player
-	Metric rTargetDist2;				//	Distance from player to target
-	int iMinFireArc;					//	Fire arc of primary weapon
-	int iMaxFireArc;
+	private:
 
-	//	Misc flags
+		//	About the object being updated
 
-	bool bGravityWarning;				//	Player in a dangerous gravity field
-	bool bHasShipBarriers;				//	TRUE if the system has ship barriers (e.g., Arena)
-	bool bHasGravity;					//	TRUE if the system has gravity
+		bool m_bTimeStopped = false;				//	Object is currently time-stopped (cached for perf).
+
+		//	Cached computed values
+
+		mutable CSpaceObject *m_pCacheObj = NULL;	//	Cached values apply to this object.
+		mutable int m_iLightIntensity = -1;			//	Light intensity at pCacheObj (-1 if not computed).
 	};
 
 //	Utility classes
@@ -444,83 +433,6 @@ class DiceRange
 		int m_iFaces;
 		int m_iCount;
 		int m_iBonus;
-	};
-
-class CAttributeDataBlock
-	{
-	public:
-        enum ETransferOptions
-            {
-            transCopy,
-            transIgnore,
-            };
-
-        struct STransferDesc
-            {
-            STransferDesc (void) :
-                    iOption(transCopy)
-                { }
-
-            ETransferOptions iOption;
-            };
-
-		CAttributeDataBlock (void);
-		CAttributeDataBlock (const CAttributeDataBlock &Src);
-		CAttributeDataBlock &operator= (const CAttributeDataBlock &Src);
-		~CAttributeDataBlock (void);
-
-		void Copy (const CAttributeDataBlock &Src, const TSortMap<CString, STransferDesc> &Options);
-		inline void DeleteAll (void) { CleanUp(); }
-		bool FindData (const CString &sAttrib, const CString **retpData = NULL) const;
-		ICCItem *FindDataAsItem (const CString &sAttrib) const;
-		bool FindObjRefData (CSpaceObject *pObj, CString *retsAttrib = NULL) const;
-		const CString &GetData (const CString &sAttrib) const;
-        inline const CString &GetData (int iIndex) const { return m_Data[iIndex].sData; }
-		ICCItem *GetDataAsItem (const CString &sAttrib) const;
-		inline const CString &GetDataAttrib (int iIndex) const { return m_Data.GetKey(iIndex); }
-		inline int GetDataCount (void) const { return m_Data.GetCount(); }
-		CSpaceObject *GetObjRefData (const CString &sAttrib) const;
-        void IncData (const CString &sAttrib, ICCItem *pValue = NULL, ICCItem **retpNewValue = NULL);
-		bool IsDataNil (const CString &sAttrib) const;
-		inline bool IsEmpty (void) const { return (m_Data.GetCount() == 0 && m_pObjRefData == NULL); }
-		bool IsEqual (const CAttributeDataBlock &Src);
-		void LoadObjReferences (CSystem *pSystem);
-		void MergeFrom (const CAttributeDataBlock &Src);
-		void OnObjDestroyed (CSpaceObject *pObj);
-		void OnSystemChanged (CSystem *pSystem);
-		void ReadFromStream (SLoadCtx &Ctx);
-		void ReadFromStream (IReadStream *pStream);
-		void SetData (const CString &sAttrib, const CString &sData);
-		void SetFromXML (CXMLElement *pData);
-		void SetObjRefData (const CString &sAttrib, CSpaceObject *pObj);
-		void WriteToStream (IWriteStream *pStream, CSystem *pSystem = NULL);
-
-		static const CAttributeDataBlock Null;
-
-	private:
-        struct SDataEntry
-            {
-            CString sData;                  //  Serialized data
-            };
-
-		struct SObjRefEntry
-			{
-			CString sName;
-			CSpaceObject *pObj;
-			DWORD dwObjID;
-
-			SObjRefEntry *pNext;
-			};
-
-		void CleanUp (void);
-        void CleanUpObjRefs (void);
-		void Copy (const CAttributeDataBlock &Copy);
-        void CopyObjRefs (SObjRefEntry *pSrc);
-		bool IsXMLText (const CString &sData) const;
-        void ReadDataEntries (IReadStream *pStream);
-
-        TSortMap<CString, SDataEntry> m_Data;
-		SObjRefEntry *m_pObjRefData;			//	Custom pointers to CSpaceObject *
 	};
 
 class CCurrencyBlock
@@ -648,6 +560,7 @@ class CDamageSource
 		DWORD GetSovereignUNID (void) const;
 		inline bool HasDamageCause (void) const { return ((m_pSource && !IsObjID()) || !m_sSourceName.IsBlank()); }
 		bool HasSource (void) const;
+		inline bool IsAutomatedWeapon (void) const { return ((m_dwFlags & FLAG_IS_AUTOMATED_WEAPON) ? true : false); }
 		bool IsCausedByEnemyOf (CSpaceObject *pObj) const;
 		bool IsCausedByFriendOf (CSpaceObject *pObj) const;
 		bool IsCausedByNonFriendOf (CSpaceObject *pObj) const;
@@ -656,9 +569,12 @@ class CDamageSource
 		bool IsEnemy (CDamageSource &Src) const;
 		bool IsEqual (const CDamageSource &Src) const;
 		bool IsEqual (CSpaceObject *pSrc) const;
+		bool IsFriend (CSovereign *pSovereign) const;
 		inline bool IsPlayer (void) const { return ((m_dwFlags & FLAG_IS_PLAYER) ? true : false); }
+		void OnLeaveSystem (void);
 		void OnObjDestroyed (CSpaceObject *pObjDestroyed);
 		void ReadFromStream (SLoadCtx &Ctx);
+		inline void SetAutomatedWeapon (bool bValue = true) { if (bValue) m_dwFlags |= FLAG_IS_AUTOMATED_WEAPON; else m_dwFlags &= FLAG_IS_AUTOMATED_WEAPON; }
 		inline void SetCause (DestructionTypes iCause) { m_iCause = iCause; }
 		void SetObj (CSpaceObject *pSource);
 		void WriteToStream (CSystem *pSystem, IWriteStream *pStream);
@@ -672,6 +588,8 @@ class CDamageSource
 			FLAG_IS_PLAYER_SUBORDINATE		= 0x00000002,
 			FLAG_IS_PLAYER_CAUSED			= 0x00000004,
 			FLAG_OBJ_ID						= 0x00000008,	//	m_pSource is an ID, not a pointer
+
+			FLAG_IS_AUTOMATED_WEAPON		= 0x00000010,	//	Source is a missile-defense system.
 			};
 
 		inline DWORD GetRawObjID (void) const { return (DWORD)m_pSource; }
@@ -883,6 +801,7 @@ class CSpaceObjectList
 		void NotifyOnObjDestroyed (SDestroyCtx &Ctx);
 		void NotifyOnObjDocked (CSpaceObject *pDockingObj, CSpaceObject *pDockTarget);
 		void NotifyOnObjEnteredGate (CSpaceObject *pGatingObj, CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pStargate);
+		bool NotifyOnObjGateCheck (CSpaceObject *pGatingObj, CTopologyNode *pDestNode, const CString &sDestEntryPoint, CSpaceObject *pGateObj);
 		void NotifyOnObjJumped (CSpaceObject *pJumpObj);
 		void NotifyOnObjReconned (CSpaceObject *pReconnedObj);
 		void NotifyOnPlayerBlacklisted (CSpaceObject *pBlacklistingObj);
@@ -1025,17 +944,17 @@ enum SpaceObjectGridFlags
 struct SSpaceObjectGridEnumerator
 	{
 	SSpaceObjectGridEnumerator (void) : pGridIndexList(NULL) { }
-	~SSpaceObjectGridEnumerator (void) { if (pGridIndexList) delete pGridIndexList; }
+	~SSpaceObjectGridEnumerator (void) { if (pGridIndexList) delete [] pGridIndexList; }
 
 	CSpaceObject *pObj;						//	Current object
 	int iGridIndex;							//	Current grid cell to search
-	CSpaceObjectList *pList;				//	Current list
+	const CSpaceObjectList *pList;				//	Current list
 	int iIndex;								//	Current index
 	int iListCount;							//	Number of elements in current list
 	bool bMore;								//	TRUE if there is more
 
 	int iGridIndexCount;					//	Number of grid indices to traverse
-	CSpaceObjectList **pGridIndexList;		//	Array of grid indices to traverse
+	const CSpaceObjectList **pGridIndexList;		//	Array of grid indices to traverse
 
 	bool bCheckBox;							//	If TRUE, only return objects in box
 	CVector vLL;							//	Box to check
@@ -1049,11 +968,12 @@ class CSpaceObjectGrid
 		~CSpaceObjectGrid (void);
 
 		inline void AddObject (CSpaceObject *pObj);
+		void Delete (CSpaceObject *pObj);
 		void DeleteAll (void);
-		void EnumStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags);
-		inline bool EnumHasMore (SSpaceObjectGridEnumerator &i) { return i.bMore; }
-		CSpaceObject *EnumGetNext (SSpaceObjectGridEnumerator &i);
-		inline CSpaceObject *EnumGetNextFast (SSpaceObjectGridEnumerator &i)
+		void EnumStart (SSpaceObjectGridEnumerator &i, const CVector &vUR, const CVector &vLL, DWORD dwFlags) const;
+		inline bool EnumHasMore (SSpaceObjectGridEnumerator &i) const { return i.bMore; }
+		CSpaceObject *EnumGetNext (SSpaceObjectGridEnumerator &i) const;
+		inline CSpaceObject *EnumGetNextFast (SSpaceObjectGridEnumerator &i) const
 			{
 			ASSERT(i.iIndex >= 0);
 			CSpaceObject *pCurObj = i.pList->GetObj(i.iIndex++);
@@ -1061,13 +981,15 @@ class CSpaceObjectGrid
 				EnumGetNextList(i);
 			return pCurObj;
 			}
-		CSpaceObject *EnumGetNextInBoxPoint (SSpaceObjectGridEnumerator &i);
+		CSpaceObject *EnumGetNextInBoxPoint (SSpaceObjectGridEnumerator &i) const;
 		void GetObjectsInBox (const CVector &vUR, const CVector &vLL, CSpaceObjectList &Result);
 
 	private:
-		bool EnumGetNextList (SSpaceObjectGridEnumerator &i);
-		bool GetGridCoord (const CVector &vPos, int *retx, int *rety);
+		bool EnumGetNextList (SSpaceObjectGridEnumerator &i) const;
+		bool GetGridCoord (const CVector &vPos, int *retx, int *rety) const;
+		const CSpaceObjectList &GetList (const CVector &vPos) const;
 		CSpaceObjectList &GetList (const CVector &vPos);
+		inline const CSpaceObjectList &GetList (int x, int y) const { return m_pGrid[y * m_iGridSize + x]; }
 		inline CSpaceObjectList &GetList (int x, int y) { return m_pGrid[y * m_iGridSize + x]; }
 
 		CSpaceObjectList *m_pGrid;
@@ -1574,7 +1496,6 @@ class CFormulaText
 //	Miscellaneous utility functions
 
 CString AppendModifiers (const CString &sModifierList1, const CString &sModifierList2);
-CString ComposePlayerNameString (const CString &sString, const CString &sPlayerName, int iGenome, ICCItem *pArgs = NULL);
 CString GetLoadStateString (ELoadStates iState);
 Metric GetScale (CXMLElement *pObj);
 bool HasModifier (const CString &sModifierList, const CString &sModifier);

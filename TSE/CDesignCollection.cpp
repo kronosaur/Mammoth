@@ -650,7 +650,7 @@ void CDesignCollection::FireGetGlobalAchievements (CGameStats &Stats)
 		}
 	}
 
-bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *retsScreen, ICCItem **retpData, int *retiPriority)
+bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *retsScreen, ICCItemPtr *retpData, int *retiPriority)
 
 //	FireGetGlobalDockScreen
 //
@@ -663,7 +663,7 @@ bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *re
 
 	int iBestPriority = -1;
 	CString sBestScreen;
-	ICCItem *pBestData = NULL;
+	ICCItemPtr pBestData;
 
 	//	Loop over all types and get the highest priority screen
 
@@ -674,7 +674,7 @@ bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *re
 
 		int iPriority;
 		CString sScreen;
-		ICCItem *pData;
+		ICCItemPtr pData;
 		if (pType->FireGetGlobalDockScreen(Event, pObj, &sScreen, &pData, &iPriority))
 			{
 			//	If we don't care about a specific screen then only want to know
@@ -682,12 +682,7 @@ bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *re
 			//	short cut.
 
 			if (retsScreen == NULL)
-				{
-				if (pData)
-					pData->Discard(&CC);
-
 				return true;
-				}
 
 			//	Otherwise, see if this is better.
 
@@ -695,16 +690,7 @@ bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *re
 				{
 				iBestPriority = iPriority;
 				sBestScreen = sScreen;
-
-				if (pBestData)
-					pBestData->Discard(&CC);
-
 				pBestData = pData;
-				}
-			else
-				{
-				if (pData)
-					pData->Discard(&CC);
 				}
 			}
 		}
@@ -724,11 +710,6 @@ bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *re
 
 	if (retpData)
 		*retpData = pBestData;
-	else
-		{
-		if (pBestData)
-			pBestData->Discard(&CC);
-		}
 
 	return true;
 	}
@@ -802,7 +783,7 @@ void CDesignCollection::FireOnGlobalIntroCommand(const CString &sCommand)
 	int i;
 
 	CString sError;
-	for (i = 0; i < m_EventsCache[evtOnGlobalIntroStarted]->GetCount(); i++)
+	for (i = 0; i < m_EventsCache[evtOnGlobalIntroCommand]->GetCount(); i++)
 		{
 		SEventHandlerDesc Event;
 		CDesignType *pType = m_EventsCache[evtOnGlobalIntroCommand]->GetEntry(i, &Event);

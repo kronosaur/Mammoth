@@ -94,11 +94,11 @@ void CRangeTypeEvent::DoEvent (DWORD dwTick, CSystem *pSystem)
 
 		if (!m_bCriteriaInit)
 			{
-			CSpaceObject::ParseCriteria(m_pCenter, m_sCriteria, &m_Criteria);
+			m_Criteria.Init(m_pCenter, m_sCriteria);
 			m_bCriteriaInit = true;
 			}
 
-		CSpaceObject::SCriteriaMatchCtx Ctx(m_Criteria);
+		CSpaceObjectCriteria::SCtx Ctx(m_Criteria);
 
 		//	See if there are any objects in range
 
@@ -125,9 +125,12 @@ void CRangeTypeEvent::DoEvent (DWORD dwTick, CSystem *pSystem)
 	else
 		{
 		CSpaceObject *pPlayerShip = pSystem->GetPlayerShip();
-		Metric rDist2 = (pPlayerShip->GetPos() - vCenter).Length2();
-		if (rDist2 < m_rRadius2)
-			pFound = pPlayerShip;
+		if (pPlayerShip)
+			{
+			Metric rDist2 = (pPlayerShip->GetPos() - vCenter).Length2();
+			if (rDist2 < m_rRadius2)
+				pFound = pPlayerShip;
+			}
 		}
 
 	//	If we did not find an object, then we try again in a little while

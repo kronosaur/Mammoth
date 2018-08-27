@@ -76,6 +76,7 @@
 #define ECCENTRICITY_ATTRIB				CONSTLIT("eccentricity")
 #define ENCOUNTERS_ATTRIB				CONSTLIT("encountersCount")
 #define ERODE_ATTRIB					CONSTLIT("erode")
+#define EVENT_HANDLER_ATTRIB			CONSTLIT("eventHandler")
 #define EXCLUSION_RADIUS_ATTRIB			CONSTLIT("exclusionRadius")
 #define ID_ATTRIB						CONSTLIT("id")
 #define IMAGE_VARIANT_ATTRIB			CONSTLIT("imageVariant")
@@ -1114,10 +1115,21 @@ ALERROR CreateObjectAtRandomLocation (SSystemCreateCtx *pCtx, CXMLElement *pDesc
 	if (error = GetLocationCriteria(pCtx, pDesc, &Criteria))
 		return error;
 
+	//	If we're placing a single station, then get its type so that we can 
+	//	use it when picking a location. In particular, this allows us to honor 
+	//	the station exclusion radius.
+
+	CStationType *pStationToPlace = NULL;
+	CXMLElement *pChild = pDesc->GetContentElement(0);
+	if (iChildCount == 1 && strEquals(pChild->GetTag(), STATION_TAG))
+		{
+		pStationToPlace = g_pUniverse->FindStationType((DWORD)pChild->GetAttributeInteger(TYPE_ATTRIB));
+		}
+
 	//	Generate a list of all locations that match the given criteria.
 
 	TProbabilityTable<int> Table;
-	if (!pCtx->pSystem->GetEmptyLocations(Criteria, OrbitDesc, NULL, &Table))
+	if (!pCtx->pSystem->GetEmptyLocations(Criteria, OrbitDesc, pStationToPlace, &Table))
 		{
 		if (g_pUniverse->InDebugMode())
 			{
@@ -3746,20 +3758,6 @@ ALERROR CSystem::CreateFromXML (CUniverse *pUniv,
 	pSystem->m_rKlicksPerPixel = pType->GetSpaceScale();
 	pSystem->m_rTimeScale = pType->GetTimeScale();
 
-	//	Get a pointer to the tables element (may be NULL)
-
-	CXMLElement *pTables = pType->GetLocalSystemTables();
-
-	//	Look for the outer-most group tag
-
-	CXMLElement *pPrimary = pType->GetDesc();
-	if (pPrimary == NULL)
-		{
-		if (retsError)
-			*retsError = CONSTLIT("Cannot find root <SystemGroup> element");
-		return ERR_FAIL;
-		}
-
 	//	Store the current system. We need this so that any OnCreate code can
 	//	get the right system.
 
@@ -3770,8 +3768,9 @@ ALERROR CSystem::CreateFromXML (CUniverse *pUniv,
 	SSystemCreateCtx Ctx(pSystem);
 	Ctx.pStats = pStats;
 
-	//	Add local tables
+	//	Add local tables, if they exist
 
+	CXMLElement *pTables = pType->GetLocalSystemTables();
 	if (pTables)
 		Ctx.LocalTables.Insert(pTables);
 
@@ -3779,27 +3778,32 @@ ALERROR CSystem::CreateFromXML (CUniverse *pUniv,
 
 	PushDebugStack(&Ctx, strPatternSubst(CONSTLIT("SystemType nodeID=%s unid=%x"), pTopology->GetID(), pType->GetUNID()));
 
-	//	Create
+	//	Create objects defined by <SystemGroup>.
+	//	NOTE: This is optional, since we can create a system procedurally in <OnCreate>
 
-	try
+	CXMLElement *pPrimary = pType->GetDesc();
+	if (pPrimary)
 		{
-		error = CreateSystemObject(&Ctx,
-				pPrimary,
-				COrbit());
-		}
-	catch (...)
-		{
-		Ctx.sError = CONSTLIT("Crash in CreateSystemObject.");
-		error = ERR_FAIL;
-		}
+		try
+			{
+			error = CreateSystemObject(&Ctx,
+					pPrimary,
+					COrbit());
+			}
+		catch (...)
+			{
+			Ctx.sError = CONSTLIT("Crash in CreateSystemObject.");
+			error = ERR_FAIL;
+			}
 
-	if (error)
-		{
-		if (retsError)
-			*retsError = Ctx.sError;
-		g_pUniverse->LogOutput(strPatternSubst(CONSTLIT("Unable to create system: %s"), Ctx.sError));
-		DumpDebugStack(&Ctx);
-		return error;
+		if (error)
+			{
+			if (retsError)
+				*retsError = Ctx.sError;
+			g_pUniverse->LogOutput(strPatternSubst(CONSTLIT("Unable to create system: %s"), Ctx.sError));
+			DumpDebugStack(&Ctx);
+			return error;
+			}
 		}
 
 	//	Invoke OnCreate event
@@ -3890,7 +3894,7 @@ ALERROR CSystem::CreateFromXML (CUniverse *pUniv,
 
 	//	Arrange all map labels so that they don't overlap
 
-	pSystem->ComputeMapLabels();
+	CMapLabelArranger::Arrange(pSystem);
 	pSystem->ComputeStars();
 
 	//	Call each object and tell it that the system has been
@@ -4440,6 +4444,12 @@ ALERROR CreateStationFromElement (SSystemCreateCtx *pCtx, CXMLElement *pDesc, co
 	DWORD dwSovereign;
 	if (pDesc->FindAttributeInteger(SOVEREIGN_ATTRIB, (int *)&dwSovereign))
 		CreateCtx.pSovereign = g_pUniverse->FindSovereign(dwSovereign);
+
+	//	Event handler
+
+	DWORD dwEventHandler;
+	if (pDesc->FindAttributeInteger(EVENT_HANDLER_ATTRIB, (int *)&dwEventHandler))
+		CreateCtx.pEventHandler = g_pUniverse->FindDesignType(dwEventHandler);
 
 	//	Create the station
 

@@ -92,6 +92,7 @@ ALERROR CEffectCreator::CreateEffect (CSystem *pSystem,
 									  const CVector &vVel,
 									  int iRotation,
 									  int iVariant,
+									  ICCItem *pData,
 									  CSpaceObject **retpEffect)
 
 //	CreateEffect
@@ -104,7 +105,12 @@ ALERROR CEffectCreator::CreateEffect (CSystem *pSystem,
 
 	//	Create a painter
 
-	IEffectPainter *pPainter = CreatePainter(CCreatePainterCtx());
+	CCreatePainterCtx CreateCtx;
+	CreateCtx.SetAnchor(pAnchor);
+	CreateCtx.SetPos(vPos);
+	CreateCtx.SetParams(pData);
+
+	IEffectPainter *pPainter = CreatePainter(CreateCtx);
 	if (pPainter == NULL)
 		return ERR_CANCEL;
 
@@ -136,6 +142,8 @@ ALERROR CEffectCreator::CreateFromTag (const CString &sTag, CEffectCreator **ret
 
 	if (strEquals(sTag, CImageEffectCreator::GetClassTag()))
 		pCreator = new CImageEffectCreator;
+	else if (strEquals(sTag, CDisintegrateEffectCreator::GetClassTag()))
+		pCreator = new CDisintegrateEffectCreator;
 	else if (strEquals(sTag, CRayEffectCreator::GetClassTag()))
 		pCreator = new CRayEffectCreator;
 	else if (strEquals(sTag, CParticleSystemEffectCreator::GetClassTag())
@@ -560,28 +568,37 @@ void CEffectCreator::InitPainterParameters (CCreatePainterCtx &Ctx, IEffectPaint
 //	Initialize painter parameters
 
 	{
+	int i;
 	SEventHandlerDesc Event;
+	ICCItemPtr pParams;
+
+	//	If we have an event, set parameters based on the result.
+
 	if (FindEventHandlerEffectType(evtGetParameters, &Event))
 		{
 		CCodeChainCtx CCCtx;
 
 		CCCtx.SaveAndDefineDataVar(Ctx.GetData());
 
-		ICCItem *pResult = CCCtx.Run(Event);
+		ICCItemPtr pResult = CCCtx.RunCode(Event);
 		if (pResult->IsError())
 			::kernelDebugLogPattern("EffectType %x GetParameters: %s", GetUNID(), (LPSTR)pResult->GetStringValue());
 		else if (pResult->IsSymbolTable())
 			{
-			int i;
-			CCSymbolTable *pTable = (CCSymbolTable *)pResult;
-
-			for (i = 0; i < pTable->GetCount(); i++)
-				pPainter->SetParamFromItem(Ctx, pTable->GetKey(i), pTable->GetElement(i));
+			for (i = 0; i < pResult->GetCount(); i++)
+				pPainter->SetParamFromItem(Ctx, pResult->GetKey(i), pResult->GetElement(i));
 			}
 		else
 			::kernelDebugLogPattern("EffectType %x GetParameters: Expected struct result.", GetUNID());
+		}
 
-		CCCtx.Discard(pResult);
+	//	If we don't have an event and if we have a parameters item, then set 
+	//	the parameters based on that.
+
+	else if (pParams = Ctx.GetParams())
+		{
+		for (i = 0; i < pParams->GetCount(); i++)
+			pPainter->SetParamFromItem(Ctx, pParams->GetKey(i), pParams->GetElement(i));
 		}
 	}
 

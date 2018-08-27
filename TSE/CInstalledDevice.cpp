@@ -8,6 +8,18 @@
 #define DEVICE_ID_ATTRIB						CONSTLIT("deviceID")
 #define ITEM_ATTRIB								CONSTLIT("item")
 
+#define PROPERTY_CAPACITOR      				CONSTLIT("capacitor")
+#define PROPERTY_ENABLED						CONSTLIT("enabled")
+#define PROPERTY_EXTERNAL						CONSTLIT("external")
+#define PROPERTY_EXTRA_POWER_USE				CONSTLIT("extraPowerUse")
+#define PROPERTY_FIRE_ARC						CONSTLIT("fireArc")
+#define PROPERTY_HP								CONSTLIT("hp")
+#define PROPERTY_LINKED_FIRE_OPTIONS			CONSTLIT("linkedFireOptions")
+#define PROPERTY_OMNIDIRECTIONAL				CONSTLIT("omnidirectional")
+#define PROPERTY_POS							CONSTLIT("pos")
+#define PROPERTY_SECONDARY						CONSTLIT("secondary")
+#define PROPERTY_TEMPERATURE      				CONSTLIT("temperature")
+
 //	CInstalledDevice class
 
 CInstalledDevice::CInstalledDevice (void) : 
@@ -25,7 +37,7 @@ CInstalledDevice::CInstalledDevice (void) :
 		m_iFireAngle(0),
 		m_iCounter(0),
 		m_iActivateDelay(0),
-		m_iSlotBonus(0),
+		m_iExtraPowerUse(0),
 		m_iSlotPosIndex(-1),
 
 		m_fOmniDirectional(false),
@@ -38,21 +50,53 @@ CInstalledDevice::CInstalledDevice (void) :
 		m_fLinkedFireTarget(false),
 		m_fLinkedFireEnemy(false),
 		m_fDuplicate(false),
-		m_fCannotBeEmpty(false)
+		m_fCannotBeEmpty(false),
+		m_fFateDamaged(false),
+		m_fFateDestroyed(false),
+		m_fFateSurvives(false),
+		m_fFateComponetized(false)
 	{
+	}
+
+bool CInstalledDevice::AccumulateSlotEnhancements (CSpaceObject *pSource, TArray<CString> &EnhancementIDs, CItemEnhancementStack *pEnhancements) const
+
+//	AccumulateSlotEnhancements
+//
+//	Accumulates enhancements confered by the slot itself.
+
+	{
+	bool bEnhanced = false;
+
+	//	Slot enhancements
+
+	if (!m_SlotEnhancements.IsEmpty())
+		bEnhanced = m_SlotEnhancements.Accumulate(CItemCtx(pSource, const_cast<CInstalledDevice *>(this)), *GetItem(), EnhancementIDs, pEnhancements);
+
+	return bEnhanced;
 	}
 
 int CInstalledDevice::CalcPowerUsed (SUpdateCtx &Ctx, CSpaceObject *pSource)
 
 //	CalcPowerUsed
 //
-//	Calculates how much power this device used this turn
+//	Calculates how much power this device used this tick. Positive numbers are
+//	consumption; negative numbers are power generation.
 
 	{
-	if (!IsEmpty()) 
-		return m_pClass->CalcPowerUsed(Ctx, this, pSource);
-	else
+	if (IsEmpty()) 
 		return 0;
+
+	//	Let the device compute power used. 
+
+	int iPower = m_pClass->CalcPowerUsed(Ctx, this, pSource);
+
+	//	Add extra power used
+
+	iPower += m_iExtraPowerUse;
+
+	//	Done
+
+	return iPower;
 	}
 
 void CInstalledDevice::FinishInstall (CSpaceObject *pSource)
@@ -130,6 +174,8 @@ CString CInstalledDevice::GetEnhancedDesc (CSpaceObject *pSource, const CItem *p
 		return CONSTLIT("+fast");
 	else if (iDamageBonus = (m_pEnhancements ? m_pEnhancements->GetBonus() : 0))
 		return (iDamageBonus > 0 ? strPatternSubst(CONSTLIT("+%d%%"), iDamageBonus) : strPatternSubst(CONSTLIT("%d%%"), iDamageBonus));
+	else if (m_pEnhancements && m_pEnhancements->IsTracking() && !m_pClass->IsTrackingWeapon(CItemCtx()))
+		return CONSTLIT("+tracking");
 
 	//	Other enhancements
 
@@ -137,6 +183,25 @@ CString CInstalledDevice::GetEnhancedDesc (CSpaceObject *pSource, const CItem *p
 		return CONSTLIT("+enhanced");
 	else
 		return NULL_STR;
+	}
+
+ItemFates CInstalledDevice::GetFate (void) const
+
+//	GetFate
+//
+//	Returns the current fate option for the device slot.
+
+	{
+	if (m_fFateDamaged)
+		return fateDamaged;
+	else if (m_fFateDestroyed)
+		return fateDestroyed;
+	else if (m_fFateSurvives)
+		return fateSurvives;
+	else if (m_fFateComponetized)
+		return fateComponetized;
+	else
+		return fateNone;
 	}
 
 int CInstalledDevice::GetHitPointsPercent (CSpaceObject *pSource)
@@ -201,7 +266,7 @@ CVector CInstalledDevice::GetPos (CSpaceObject *pSource)
 	{
 	if (m_f3DPosition)
 		{
-		int iScale = pSource->GetImage().GetImageViewportSize();
+		int iScale = pSource->GetImageScale();
 
 		CVector vOffset;
 		C3DConversion::CalcCoord(iScale, pSource->GetRotation() + m_iPosAngle, m_iPosRadius, m_iPosZ, &vOffset);
@@ -227,7 +292,7 @@ CVector CInstalledDevice::GetPosOffset (CSpaceObject *pSource)
 	{
 	if (m_f3DPosition)
 		{
-		int iScale = pSource->GetImage().GetImageViewportSize();
+		int iScale = pSource->GetImageScale();
 
 		CVector vOffset;
 		C3DConversion::CalcCoord(iScale, 90 + m_iPosAngle, m_iPosRadius, m_iPosZ, &vOffset);
@@ -264,10 +329,14 @@ void CInstalledDevice::InitFromDesc (const SDeviceDesc &Desc)
 	m_fCannotBeEmpty = Desc.bCannotBeEmpty;
 
 	SetLinkedFireOptions(Desc.dwLinkedFireOptions);
+	SetFate(Desc.iFate);
 
 	m_fSecondaryWeapon = Desc.bSecondary;
 
-	m_iSlotBonus = Desc.iSlotBonus;
+	m_SlotEnhancements = Desc.Enhancements;
+	if (Desc.iSlotBonus != 0)
+		m_SlotEnhancements.InsertHPBonus(Desc.iSlotBonus);
+
 	m_iSlotPosIndex = -1;
 	}
 
@@ -313,6 +382,7 @@ void CInstalledDevice::Install (CSpaceObject *pObj, CItemListManipulator &ItemLi
 	m_pOverlay = NULL;
 	m_dwData = 0;
 	m_iCounter = 0;
+	m_iExtraPowerUse = 0;
 	m_fWaiting = false;
 	m_fEnabled = true;
 	m_fTriggered = false;
@@ -367,6 +437,8 @@ void CInstalledDevice::Install (CSpaceObject *pObj, CItemListManipulator &ItemLi
 		m_f3DPosition = Desc.b3DPosition;
 		m_fCannotBeEmpty = Desc.bCannotBeEmpty;
 
+		SetFate(Desc.iFate);
+
 		m_fExternal = (Desc.bExternal || m_pClass->IsExternal());
 
 		m_fOmniDirectional = Desc.bOmnidirectional;
@@ -376,7 +448,9 @@ void CInstalledDevice::Install (CSpaceObject *pObj, CItemListManipulator &ItemLi
 		SetLinkedFireOptions(Desc.dwLinkedFireOptions);
 		m_fSecondaryWeapon = Desc.bSecondary;
 
-		m_iSlotBonus = Desc.iSlotBonus;
+		m_SlotEnhancements = Desc.Enhancements;
+		if (Desc.iSlotBonus != 0)
+			m_SlotEnhancements.InsertHPBonus(Desc.iSlotBonus);
 		}
 
 	//	Event (when creating a ship we wait until the
@@ -600,8 +674,18 @@ void CInstalledDevice::ReadFromStream (CSpaceObject *pSource, SLoadCtx &Ctx)
 	else
 		m_iSlotPosIndex = (int)LOWORD(dwLoad);
 
+	//	In version 159, we replace slot bonus with extra power variable
+
+	int iSlotBonus = 0;
 	Ctx.pStream->Read((char *)&dwLoad, sizeof(DWORD));
-	m_iSlotBonus = (int)LOWORD(dwLoad);
+
+	if (Ctx.dwVersion >= 159)
+		m_iExtraPowerUse = (int)LOWORD(dwLoad);
+	else
+		{
+		m_iExtraPowerUse = 0;
+		iSlotBonus = (int)LOWORD(dwLoad);
+		}
 
 	if (Ctx.dwVersion >= 29)
 		m_iDeviceSlot = (int)HIWORD(dwLoad);
@@ -635,12 +719,12 @@ void CInstalledDevice::ReadFromStream (CSpaceObject *pSource, SLoadCtx &Ctx)
 
 	Ctx.pStream->Read((char *)&dwLoad, sizeof(DWORD));
 	m_fOmniDirectional =	((dwLoad & 0x00000001) ? true : false);
-	m_f3DPosition =		   (((dwLoad & 0x00000002) ? true : false) && (Ctx.dwVersion >= 73));
-	//	0x00000004 UNUSED as of version 58
+	m_f3DPosition =			(((dwLoad & 0x00000002) ? true : false) && (Ctx.dwVersion >= 73));
+	m_fFateSurvives =		(((dwLoad & 0x00000004) ? true : false) && (Ctx.dwVersion >= 58));
 	m_fOverdrive =			((dwLoad & 0x00000008) ? true : false);
 	m_fOptimized =			((dwLoad & 0x00000010) ? true : false);
 	m_fSecondaryWeapon =	((dwLoad & 0x00000020) ? true : false);
-	//	0x00000040 UNUSED as of version 58
+	m_fFateDamaged =		(((dwLoad & 0x00000040) ? true : false) && (Ctx.dwVersion >= 58));
 	m_fEnabled =			((dwLoad & 0x00000080) ? true : false);
 	m_fWaiting =			((dwLoad & 0x00000100) ? true : false);
 	m_fTriggered =			((dwLoad & 0x00000200) ? true : false);
@@ -653,6 +737,9 @@ void CInstalledDevice::ReadFromStream (CSpaceObject *pSource, SLoadCtx &Ctx)
 	m_fExternal =			((dwLoad & 0x00008000) ? true : false);
 	m_fDuplicate =			((dwLoad & 0x00010000) ? true : false);
 	m_fCannotBeEmpty =		((dwLoad & 0x00020000) ? true : false);
+	m_fFateDestroyed =		((dwLoad & 0x00040000) ? true : false);
+	m_fFateComponetized =	((dwLoad & 0x00080000) ? true : false);
+	bool bSlotEnhancements =((dwLoad & 0x00100000) ? true : false);
 
 	//	Previous versions did not save this flag
 
@@ -690,6 +777,12 @@ void CInstalledDevice::ReadFromStream (CSpaceObject *pSource, SLoadCtx &Ctx)
 
 	if (Ctx.dwVersion >= 92)
 		m_pEnhancements = CItemEnhancementStack::ReadFromStream(Ctx);
+
+	if (bSlotEnhancements)
+		m_SlotEnhancements.ReadFromStream(Ctx);
+
+	if (iSlotBonus != 0)
+		m_SlotEnhancements.InsertHPBonus(iSlotBonus);
 	}
 
 int CInstalledDevice::IncCharges (CSpaceObject *pSource, int iChange)
@@ -771,6 +864,46 @@ void CInstalledDevice::SetEnhancements (const TSharedPtr<CItemEnhancementStack> 
 		m_pEnhancements.Delete();
 	}
 
+void CInstalledDevice::SetFate (ItemFates iFate)
+
+//	SetFate
+//
+//	Sets the fate of the device when the ship is destroyed.
+
+	{
+	//	Clear out all the flats
+
+	m_fFateDamaged = false;
+	m_fFateDestroyed = false;
+	m_fFateSurvives = false;
+	m_fFateComponetized = false;
+
+	//	Now set the flags appropriately
+
+	switch (iFate)
+		{
+		case fateComponetized:
+			m_fFateComponetized = true;
+			break;
+
+		case fateDamaged:
+			m_fFateDamaged = true;
+			break;
+
+		case fateDestroyed:
+			m_fFateDestroyed = true;
+			break;
+
+		case fateSurvives:
+			m_fFateSurvives = true;
+			break;
+
+		default:
+			//	Default.
+			break;
+		}
+	}
+
 void CInstalledDevice::SetLastShot (CSpaceObject *pObj, int iIndex)
 
 //	SetLastShot
@@ -814,6 +947,180 @@ void CInstalledDevice::SetLinkedFireOptions (DWORD dwOptions)
 		m_fLinkedFireTarget = true;
 	else if (dwOptions & CDeviceClass::lkfEnemyInRange)
 		m_fLinkedFireEnemy = true;
+	}
+
+bool CInstalledDevice::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, CString *retsError)
+
+//	SetProperty
+//
+//	Sets a property for an installed device. Returns FALSE if we could not set
+//	the property for some reason.
+
+	{
+	CCodeChain &CC = g_pUniverse->GetCC();
+	if (IsEmpty())
+		{
+		if (retsError) *retsError = CONSTLIT("No device installed.");
+		return false;
+		}
+
+	//	Figure out what to set
+
+    if (strEquals(sName, PROPERTY_CAPACITOR))
+        {
+        CSpaceObject *pSource = Ctx.GetSource();
+        if (!m_pClass->SetCounter(this, pSource, CDeviceClass::cntCapacitor, pValue->GetIntegerValue()))
+            {
+            if (retsError) *retsError = CONSTLIT("Unable to set capacitor value.");
+            return false;
+            }
+        }
+	else if (strEquals(sName, PROPERTY_EXTERNAL))
+		{
+		bool bSetExternal = (pValue && !pValue->IsNil());
+		if (IsExternal() != bSetExternal)
+			{
+			//	If the class is external and we don't want it to be external, then
+			//	we cannot comply.
+
+			if (m_pClass->IsExternal() && !bSetExternal)
+				{
+				if (retsError) *retsError = CONSTLIT("Device is natively external and cannot be made internal.");
+				return false;
+				}
+
+			SetExternal(bSetExternal);
+			}
+		}
+
+	else if (strEquals(sName, PROPERTY_EXTRA_POWER_USE))
+		{
+		m_iExtraPowerUse = pValue->GetIntegerValue();
+		}
+
+	else if (strEquals(sName, PROPERTY_FIRE_ARC))
+		{
+		//	A value of nil means no fire arc (and no omni)
+
+		if (pValue == NULL || pValue->IsNil())
+			{
+			SetOmniDirectional(false);
+			SetFireArc(0, 0);
+			}
+
+		//	A value of "omnidirectional" counts
+
+		else if (strEquals(pValue->GetStringValue(), PROPERTY_OMNIDIRECTIONAL))
+			{
+			SetOmniDirectional(true);
+			SetFireArc(0, 0);
+			}
+
+		//	A single value means that we just point in a direction
+
+		else if (pValue->GetCount() == 1)
+			{
+			int iMinFireArc = AngleMod(pValue->GetElement(0)->GetIntegerValue());
+			SetOmniDirectional(false);
+			SetFireArc(iMinFireArc, iMinFireArc);
+			}
+
+		//	Otherwise we expect a list with two elements
+
+		else if (pValue->GetCount() >= 2)
+			{
+			int iMinFireArc = AngleMod(pValue->GetElement(0)->GetIntegerValue());
+			int iMaxFireArc = AngleMod(pValue->GetElement(1)->GetIntegerValue());
+			SetOmniDirectional(false);
+			SetFireArc(iMinFireArc, iMaxFireArc);
+			}
+
+		//	Invalid
+
+		else
+			{
+			if (retsError) *retsError = CONSTLIT("Invalid fireArc parameter.");
+			return false;
+			}
+		}
+
+	else if (strEquals(sName, PROPERTY_LINKED_FIRE_OPTIONS))
+		{
+		//	Parse the options
+
+		DWORD dwOptions;
+		if (!::GetLinkedFireOptions(pValue, &dwOptions, retsError))
+			{
+			if (retsError) *retsError = CONSTLIT("Invalid linked-fire option.");
+			return false;
+			}
+
+		//	Set
+
+		SetLinkedFireOptions(dwOptions);
+		}
+
+	else if (strEquals(sName, PROPERTY_POS))
+		{
+		//	Get the parameters. We accept a single list parameter with angle/radius/z.
+		//	(The latter is compatible with the return of objGetDevicePos.)
+
+		int iPosAngle;
+		int iPosRadius;
+		int iZ;
+		if (pValue == NULL || pValue->IsNil())
+			{
+			iPosAngle = 0;
+			iPosRadius = 0;
+			iZ = 0;
+			}
+		else if (pValue->GetCount() >= 2)
+			{
+			iPosAngle = pValue->GetElement(0)->GetIntegerValue();
+			iPosRadius = pValue->GetElement(1)->GetIntegerValue();
+
+			if (pValue->GetCount() >= 3)
+				iZ = pValue->GetElement(2)->GetIntegerValue();
+			else
+				iZ = 0;
+			}
+		else
+			{
+			if (retsError) *retsError = CONSTLIT("Invalid angle and radius");
+			return false;
+			}
+
+		//	Set it
+
+		SetPosAngle(iPosAngle);
+		SetPosRadius(iPosRadius);
+		SetPosZ(iZ);
+		}
+
+	else if (strEquals(sName, PROPERTY_SECONDARY))
+		{
+		if (pValue == NULL || !pValue->IsNil())
+			SetSecondary(true);
+		else
+			SetSecondary(false);
+		}
+
+    else if (strEquals(sName, PROPERTY_TEMPERATURE))
+        {
+        CSpaceObject *pSource = Ctx.GetSource();
+        if (!m_pClass->SetCounter(this, pSource, CDeviceClass::cntTemperature, pValue->GetIntegerValue()))
+            {
+            if (retsError) *retsError = CONSTLIT("Unable to set temperature value.");
+            return false;
+            }
+        }
+
+	//	Otherwise, let any sub-classes handle it.
+
+	else
+		return m_pClass->SetItemProperty(Ctx, sName, pValue, retsError);
+
+	return true;
 	}
 
 void CInstalledDevice::Uninstall (CSpaceObject *pObj, CItemListManipulator &ItemList)
@@ -941,6 +1248,7 @@ void CInstalledDevice::WriteToStream (IWriteStream *pStream)
 //	DWORD		device: flags
 //
 //	CItemEnhancementStack
+//	CEnhancementDesc
 
 	{
 	int i;
@@ -973,7 +1281,7 @@ void CInstalledDevice::WriteToStream (IWriteStream *pStream)
 	dwSave = MAKELONG(m_iSlotPosIndex, m_iCounter);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
-	dwSave = MAKELONG(m_iSlotBonus, m_iDeviceSlot);
+	dwSave = MAKELONG(m_iExtraPowerUse, m_iDeviceSlot);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
 	dwSave = MAKELONG(m_iActivateDelay, m_iPosZ);
@@ -982,11 +1290,11 @@ void CInstalledDevice::WriteToStream (IWriteStream *pStream)
 	dwSave = 0;
 	dwSave |= (m_fOmniDirectional ?		0x00000001 : 0);
 	dwSave |= (m_f3DPosition ?			0x00000002 : 0);
-	//	0x00000004 UNUSED as of version 58
+	dwSave |= (m_fFateSurvives ?		0x00000004 : 0);
 	dwSave |= (m_fOverdrive ?			0x00000008 : 0);
 	dwSave |= (m_fOptimized ?			0x00000010 : 0);
 	dwSave |= (m_fSecondaryWeapon ?		0x00000020 : 0);
-	//	0x00000040 UNUSED as of version 58
+	dwSave |= (m_fFateDamaged ?			0x00000040 : 0);
 	dwSave |= (m_fEnabled ?				0x00000080 : 0);
 	dwSave |= (m_fWaiting ?				0x00000100 : 0);
 	dwSave |= (m_fTriggered ?			0x00000200 : 0);
@@ -998,7 +1306,13 @@ void CInstalledDevice::WriteToStream (IWriteStream *pStream)
 	dwSave |= (m_fExternal ?			0x00008000 : 0);
 	dwSave |= (m_fDuplicate ?			0x00010000 : 0);
 	dwSave |= (m_fCannotBeEmpty ?		0x00020000 : 0);
+	dwSave |= (m_fFateDestroyed ?		0x00040000 : 0);
+	dwSave |= (m_fFateComponetized ?	0x00080000 : 0);
+	dwSave |= (!m_SlotEnhancements.IsEmpty() ? 0x00100000 : 0);
 	pStream->Write((char *)&dwSave, sizeof(DWORD));
 
 	CItemEnhancementStack::WriteToStream(m_pEnhancements, pStream);
+
+	if (!m_SlotEnhancements.IsEmpty())
+		m_SlotEnhancements.WriteToStream(*pStream);
 	}

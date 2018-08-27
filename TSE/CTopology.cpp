@@ -39,6 +39,7 @@
 #define RADIUS_ATTRIB							CONSTLIT("radius")
 #define ROOT_NODE_ATTRIB						CONSTLIT("rootNode")
 #define TO_ATTRIB								CONSTLIT("to")
+#define UNCHARTED_ATTRIB						CONSTLIT("uncharted")
 #define UNID_ATTRIB								CONSTLIT("UNID")
 #define VARIANT_ATTRIB							CONSTLIT("variant")
 
@@ -464,7 +465,14 @@ ALERROR CTopology::AddStargateRoute (const CTopologyNode::SStargateRouteDesc &De
 
 	//	Add stargate from source to destination
 
-	if (error = Desc.pFromNode->AddStargate(sSourceGate, Desc.pToNode->GetID(), sDestGate, &Desc.MidPoints))
+	CTopologyNode::SStargateDesc GateDesc;
+	GateDesc.sName = sSourceGate;
+	GateDesc.sDestNode = Desc.pToNode->GetID();
+	GateDesc.sDestName = sDestGate;
+	GateDesc.pMidPoints = &Desc.MidPoints;
+	GateDesc.bUncharted = Desc.bUncharted;
+
+	if (error = Desc.pFromNode->AddStargate(GateDesc))
 		return ERR_FAIL;
 
 	//	Check to see if the destination gate exists already
@@ -477,7 +485,13 @@ ALERROR CTopology::AddStargateRoute (const CTopologyNode::SStargateRouteDesc &De
 
 	if (!bExists && !Desc.bOneWay && !Desc.pToNode->IsEndGame())
 		{
-		if (error = Desc.pToNode->AddStargate(sDestGate, Desc.pFromNode->GetID(), sSourceGate, &Desc.MidPoints))
+		GateDesc.sName = sDestGate;
+		GateDesc.sDestNode = Desc.pFromNode->GetID();
+		GateDesc.sDestName = sSourceGate;
+		GateDesc.pMidPoints = &Desc.MidPoints;
+		GateDesc.bUncharted = Desc.bUncharted;
+
+		if (error = Desc.pToNode->AddStargate(GateDesc))
 			return ERR_FAIL;
 		}
 
@@ -527,15 +541,13 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 	//	2.	We are in a <Node> element (pNode is not NULL) and we have a <Stargate> element
 	//		leading to another node
 
-	CString sGateName;
-	CString sDest;
-	CString sDestEntryPoint;
-	bool bOneWay;
+	CTopologyNode::SStargateDesc GateDesc;
+	bool bOneWay = false;
 	if (pNode == NULL)
 		{
 		CString sSource;
-		CTopologyNode::ParseStargateString(pGateDesc->GetAttribute(FROM_ATTRIB), &sSource, &sGateName);
-		CTopologyNode::ParseStargateString(pGateDesc->GetAttribute(TO_ATTRIB), &sDest, &sDestEntryPoint);
+		CTopologyNode::ParseStargateString(pGateDesc->GetAttribute(FROM_ATTRIB), &sSource, &GateDesc.sName);
+		CTopologyNode::ParseStargateString(pGateDesc->GetAttribute(TO_ATTRIB), &GateDesc.sDestNode, &GateDesc.sDestName);
 		bOneWay = pGateDesc->GetAttributeBool(ONE_WAY_ATTRIB);
 
 		if (sSource.IsBlank())
@@ -544,7 +556,7 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 			return ERR_FAIL;
 			}
 
-		if (sDest.IsBlank())
+		if (GateDesc.sDestNode.IsBlank())
 			{
 			Ctx.sError = CONSTLIT("Missing to= attribute in <Stargate> directive.");
 			return ERR_FAIL;
@@ -554,13 +566,16 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 		STopologyCreateCtx AddCtx(Ctx);
 		AddCtx.pGateDesc = pGateDesc;
-		AddCtx.sOtherNodeID = sDest;
-		AddCtx.sOtherNodeEntryPoint = sDestEntryPoint;
+		AddCtx.sOtherNodeID = GateDesc.sDestNode;
+		AddCtx.sOtherNodeEntryPoint = GateDesc.sDestName;
 
 		//	Find the source node
 
 		if (error = GetOrAddTopologyNode(AddCtx, sSource, &pNode))
+			{
+			Ctx.sError = AddCtx.sError;
 			return error;
+			}
 
 		//	Must return a node
 
@@ -574,15 +589,15 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 		{
 		//	Get basic data from the element
 
-		sGateName = pGateDesc->GetAttribute(NAME_ATTRIB);
+		GateDesc.sName = pGateDesc->GetAttribute(NAME_ATTRIB);
 
 		CString sTo;
 		if (pGateDesc->FindAttribute(TO_ATTRIB, &sTo))
-			CTopologyNode::ParseStargateString(sTo, &sDest, &sDestEntryPoint);
+			CTopologyNode::ParseStargateString(sTo, &GateDesc.sDestNode, &GateDesc.sDestName);
 		else
 			{
-			sDest = pGateDesc->GetAttribute(DESTID_ATTRIB);
-			sDestEntryPoint = pGateDesc->GetAttribute(DESTGATE_ATTRIB);
+			GateDesc.sDestNode = pGateDesc->GetAttribute(DESTID_ATTRIB);
+			GateDesc.sDestName = pGateDesc->GetAttribute(DESTGATE_ATTRIB);
 			}
 
 		bOneWay = pGateDesc->GetAttributeBool(ONE_WAY_ATTRIB);
@@ -590,7 +605,7 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 	//	Make sure we have a destination
 
-	if (sDest.IsBlank())
+	if (GateDesc.sDestNode.IsBlank())
 		{
 		Ctx.sError = strPatternSubst(CONSTLIT("Topology %s: Stargate destID required."), pNode->GetID());
 		return ERR_FAIL;
@@ -606,7 +621,7 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 	//	If the destination is PREV_DEST, then we handle it
 
-	if (strEquals(sDest, PREV_DEST))
+	if (strEquals(GateDesc.sDestNode, PREV_DEST))
 		{
 		//	If this is a root node, then we keep the "Prev" keyword
 		//	(we will fix it up later, when the system actually gets created.)
@@ -615,7 +630,7 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 			{
 			//	In this case, we need a gate name
 
-			if (sGateName.IsBlank())
+			if (GateDesc.sName.IsBlank())
 				{
 				Ctx.sError = strPatternSubst(CONSTLIT("Topology %s: Stargate name required."), pNode->GetID());
 				return ERR_FAIL;
@@ -623,10 +638,10 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 			//	Add the stargate
 
-			if (error = pNode->AddStargate(sGateName, sDest, NULL_STR))
+			if (error = pNode->AddStargate(GateDesc))
 				{
 				//	A duplicate name is not an error--just a warning
-				CString sWarning = strPatternSubst(CONSTLIT("Topology %s: Duplicate stargate name: %s."), pNode->GetID(), sGateName);
+				CString sWarning = strPatternSubst(CONSTLIT("Topology %s: Duplicate stargate name: %s."), pNode->GetID(), GateDesc.sName);
 				::kernelDebugLogString(sWarning);
 				}
 			}
@@ -643,10 +658,10 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 	//	If we're looking for the fragment exit, replace with appropriate gate
 
-	if (strEquals(sDest, FRAGMENT_EXIT_DEST))
+	if (strEquals(GateDesc.sDestNode, FRAGMENT_EXIT_DEST))
 		{
-		sDest = Ctx.sFragmentExitID;
-		sDestEntryPoint = Ctx.sFragmentExitGate;
+		GateDesc.sDestNode = Ctx.sFragmentExitID;
+		GateDesc.sDestName = Ctx.sFragmentExitGate;
 		}
 
 	//	Get the node
@@ -659,10 +674,13 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 	AddCtx.pGateDesc = pGateDesc;
 	AddCtx.sOtherNodeID = pNode->GetID();
-	AddCtx.sOtherNodeEntryPoint = sGateName;
+	AddCtx.sOtherNodeEntryPoint = GateDesc.sName;
 
-	if (error = GetOrAddTopologyNode(AddCtx, sDest, &pDest))
+	if (error = GetOrAddTopologyNode(AddCtx, GateDesc.sDestNode, &pDest))
+		{
+		Ctx.sError = AddCtx.sError;
 		return error;
+		}
 
 	//	If we don't have a node, then ignore (this can happen if we point to a node descriptor
 	//	that is empty).
@@ -674,9 +692,9 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 
 	CTopologyNode::SStargateRouteDesc RouteDesc;
 	RouteDesc.pFromNode = pNode;
-	RouteDesc.sFromName = sGateName;
+	RouteDesc.sFromName = GateDesc.sName;
 	RouteDesc.pToNode = pDest;
-	RouteDesc.sToName = sDestEntryPoint;
+	RouteDesc.sToName = GateDesc.sDestName;
 	RouteDesc.bOneWay = bOneWay;
 
 	//	Collect any stargate options
@@ -691,13 +709,15 @@ ALERROR CTopology::AddStargate (STopologyCreateCtx &Ctx, CTopologyNode *pNode, b
 			}
 		}
 
+	RouteDesc.bUncharted = pGateDesc->GetAttributeBool(UNCHARTED_ATTRIB);
+
 	//	Create
 
 	if (error = AddStargateRoute(RouteDesc))
 		{
 		//	A duplicate name is not an error--just a warning
 
-		CString sWarning = strPatternSubst(CONSTLIT("Topology %s: Duplicate stargate name: %s."), pNode->GetID(), sGateName);
+		CString sWarning = strPatternSubst(CONSTLIT("Topology %s: Duplicate stargate name: %s."), pNode->GetID(), GateDesc.sName);
 		::kernelDebugLogString(sWarning);
 		}
 
@@ -861,6 +881,54 @@ ALERROR CTopology::AddTopologyNode (STopologyCreateCtx &Ctx, const CString &sNod
 
 	{
 	return GetOrAddTopologyNode(Ctx, sNodeID, retpNewNode);
+	}
+
+void CTopology::CalcDistances (const CTopologyNode *pSrc, TSortMap<CString, int> &retDistances) const
+
+//	CalcDistances
+//
+//	Returns a map of distances from pSrc. If a node is not reachable from pSrc,
+//	then we leave the distance as -1 (UNKNOWN_DISTANCE).
+
+	{
+	int i;
+
+	retDistances.DeleteAll();
+	if (GetTopologyNodeCount() == 0)
+		return;
+
+	//	We mark nodes to track our progress, so we have to save the
+	//	previous value of the marks.
+	//
+	//	We also initialize the calculated distance to UNKNOWN_DISTANCE
+
+	CLargeSet OldMarks;
+	for (i = 0; i < GetTopologyNodeCount(); i++)
+		{
+		if (GetTopologyNode(i)->IsMarked())
+			OldMarks.Set(i);
+
+		GetTopologyNode(i)->SetMarked(false);
+		GetTopologyNode(i)->SetCalcDistance(UNKNOWN_DISTANCE);
+		}
+
+	pSrc->SetCalcDistance(0);
+
+	//	Loop over all nodes and compute the distance (this call will set the
+	//	calculated distance and store it in the node).
+
+	for (i = 0; i < GetTopologyNodeCount(); i++)
+		GetDistance(GetTopologyNode(i), INFINITE_DISTANCE);
+
+	//	Restore and return
+
+	retDistances.GrowToFit(GetTopologyNodeCount());
+	for (i = 0; i < GetTopologyNodeCount(); i++)
+		{
+		CTopologyNode *pNode = GetTopologyNode(i);
+		retDistances.SetAt(pNode->GetID(), pNode->GetCalcDistance());
+		pNode->SetMarked(OldMarks.IsSet(i));
+		}
 	}
 
 ALERROR CTopology::CreateTopologyNode (STopologyCreateCtx &Ctx, const CString &sID, SNodeCreateCtx &NodeCtx, CTopologyNode **retpNode)
@@ -1223,7 +1291,7 @@ int CTopology::GetDistance (const CTopologyNode *pSource, int iBestDist) const
 	//	Recursively compute the distance based on any neighboring
 	//	systems.
 
-	bool bDistKnown = true;
+	bool bDistKnown = false;
 	iNewBestDist = INFINITE_DISTANCE;
 	for (i = 0; i < pSource->GetStargateCount(); i++)
 		{
@@ -1240,19 +1308,17 @@ int CTopology::GetDistance (const CTopologyNode *pSource, int iBestDist) const
 				{
 				iNewBestDist = iDist;
 
+				//	At least one path leads to the destination, so we can set the
+				//	distance.
+
+				bDistKnown = true;
+
 				//	Can't get closer than this, so we're done.
 
 				if (iNewBestDist == 0)
 					break;
 				}
 			}
-
-		//	If the destination node doesn't know its distance, then we can't
-		//	compute our distance either (it means that we're down a dead-end branch
-		//	or something).
-
-		if (pDest->GetCalcDistance() == UNKNOWN_DISTANCE)
-			bDistKnown = false;
 		}
 
 	//	Clear the mark

@@ -31,7 +31,7 @@ class CRangeTypeEvent : public CSystemEvent
 		CString m_sCriteria;				//	Match these objects (if empty, match player ship)
 		
 		Metric m_rRadius2;					//	Cached for efficiency.
-		CSpaceObject::Criteria m_Criteria;	//	Parsed criteria (cached)
+		CSpaceObjectCriteria m_Criteria;	//	Parsed criteria (cached)
 		bool m_bCriteriaInit;				//	TRUE if we've parsed the criteria
 	};
 
@@ -42,6 +42,7 @@ class CTimedEncounterEvent : public CSystemEvent
 							  CSpaceObject *pTarget,
 							  DWORD dwEncounterTableUNID,
 							  CSpaceObject *pGate,
+							  const CVector &vPos,
 							  Metric rDistance);
 		CTimedEncounterEvent (SLoadCtx &Ctx);
 
@@ -54,9 +55,13 @@ class CTimedEncounterEvent : public CSystemEvent
 		virtual void OnWriteToStream (CSystem *pSystem, IWriteStream *pStream) override;
 
 	private:
+		CVector CalcEncounterPos (CSpaceObject *pTarget, Metric rDistance) const;
+
 		CSpaceObject *m_pTarget;
 		DWORD m_dwEncounterTableUNID;
+
 		CSpaceObject *m_pGate;
+		CVector m_vPos;
 		Metric m_rDistance;
 	};
 

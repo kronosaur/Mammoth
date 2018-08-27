@@ -36,10 +36,12 @@
 #define PROPERTY_MASS_BONUS_PER_CHARGE			CONSTLIT("massBonusPerCharge")
 #define PROPERTY_REFERENCE						CONSTLIT("reference")
 #define PROPERTY_ROOT_NAME						CONSTLIT("rootName")
+#define PROPERTY_TRADE_ID						CONSTLIT("tradeID")
 #define PROPERTY_VALUE_BONUS_PER_CHARGE			CONSTLIT("valueBonusPerCharge")
 #define PROPERTY_USED							CONSTLIT("used")
 #define PROPERTY_WEAPON_TYPES					CONSTLIT("weaponTypes")
 
+#define LANGID_CORE_CHARGES						CONSTLIT("core.charges")
 #define LANGID_CORE_REFERENCE					CONSTLIT("core.reference")
 
 CItemEnhancement CItem::m_NullMod;
@@ -139,6 +141,7 @@ void CItem::AccumulateCustomAttributes (CItemCtx &ItemCtx, TArray<SDisplayAttrib
 	CCodeChainCtx Ctx;
 
 	Ctx.SetItemType(GetType());
+	Ctx.DefineContainingType(m_pItemType);
 	Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 	Ctx.SaveAndDefineItemVar(*this);
 	Ctx.SaveAndDefineDataVar(pData);
@@ -466,6 +469,7 @@ bool CItem::FireCanBeInstalled (CSpaceObject *pSource, int iSlot, CString *retsE
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -530,6 +534,7 @@ bool CItem::FireCanBeUninstalled (CSpaceObject *pSource, CString *retsError) con
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -572,6 +577,7 @@ void CItem::FireCustomEvent (CItemCtx &ItemCtx, const CString &sEvent, ICCItem *
 		{
 		//	Define some globals
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 		Ctx.SaveAndDefineItemVar(*this);
 		Ctx.SaveAndDefineDataVar(pData);
@@ -613,6 +619,7 @@ void CItem::FireOnAddedAsEnhancement (CSpaceObject *pSource, const CItem &ItemEn
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(ItemEnhanced);
 		Ctx.DefineInteger(CONSTLIT("aResult"), (int)iStatus);
@@ -642,6 +649,7 @@ bool CItem::FireOnDestroyCheck (CItemCtx &ItemCtx, DestructionTypes iCause, cons
 		{
 		Ctx.SetEvent(eventOnDestroyCheck);
 		Ctx.SetItemType(GetType());
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 		Ctx.SaveAndDefineItemVar(*this);
 		Ctx.DefineSpaceObject(CONSTLIT("aDestroyer"), Attacker.GetObj());
@@ -672,6 +680,7 @@ void CItem::FireOnDisabled (CSpaceObject *pSource) const
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -694,6 +703,7 @@ void CItem::FireOnDocked (CSpaceObject *pSource, CSpaceObject *pDockedAt) const
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 		Ctx.DefineSpaceObject(CONSTLIT("aObjDocked"), pSource);
@@ -718,6 +728,7 @@ void CItem::FireOnEnabled (CSpaceObject *pSource) const
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -740,6 +751,7 @@ void CItem::FireOnInstall (CSpaceObject *pSource) const
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -763,6 +775,7 @@ void CItem::FireOnObjDestroyed (CSpaceObject *pSource, const SDestroyCtx &Ctx) c
 		{
 		CCodeChainCtx CCCtx;
 
+		CCCtx.DefineContainingType(m_pItemType);
 		CCCtx.SaveAndDefineSourceVar(pSource);
 		CCCtx.SaveAndDefineItemVar(*this);
 		CCCtx.DefineSpaceObject(CONSTLIT("aObjDestroyed"), Ctx.pObj);
@@ -791,6 +804,7 @@ bool CItem::FireOnReactorOverload (CSpaceObject *pSource) const
 		CCodeChainCtx Ctx;
 		bool bHandled = false;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -819,6 +833,7 @@ void CItem::FireOnRemovedAsEnhancement (CSpaceObject *pSource, const CItem &Item
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(ItemEnhanced);
 
@@ -841,6 +856,7 @@ void CItem::FireOnUninstall (CSpaceObject *pSource) const
 		{
 		CCodeChainCtx Ctx;
 
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pSource);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -859,6 +875,19 @@ const CItemList &CItem::GetComponents (void) const
 
 	{
 	return m_pItemType->GetComponents();
+	}
+
+ICCItemPtr CItem::GetDataAsItem (const CString &sAttrib) const
+
+//	GetDataAsItem
+//
+//	Returns data
+
+	{
+	if (m_pExtra)
+		return m_pExtra->m_Data.GetDataAsItem(sAttrib);
+
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
 	}
 
 CString CItem::GetDesc (CItemCtx &ItemCtx, bool bActual) const
@@ -880,6 +909,7 @@ CString CItem::GetDesc (CItemCtx &ItemCtx, bool bActual) const
 
 		Ctx.SetEvent(eventGetDescription);
 		Ctx.SetItemType(GetType());
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -957,6 +987,12 @@ bool CItem::GetDisplayAttributes (CItemCtx &Ctx, TArray<SDisplayAttribute> *retL
 
 		if (IsEnhanced())
 			retList->Insert(SDisplayAttribute(attribPositive, CONSTLIT("+enhanced"), true));
+
+		//	Charges
+
+		CString sNoun;
+		if (m_pItemType->TranslateText(*this, LANGID_CORE_CHARGES, NULL, &sNoun))
+			retList->Insert(SDisplayAttribute(attribNeutral, CLanguage::ComposeNounPhrase(sNoun, GetCharges(), NULL_STR, 0, nounCountAlways)));
 		}
 
 	//	Add various engine-based attributes (these are shown even if the item 
@@ -1104,6 +1140,7 @@ CString CItem::GetNounPhrase (CItemCtx &Ctx, DWORD dwFlags) const
 
 		Ctx.SetEvent(eventGetName);
 		Ctx.SetItemType(GetType());
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(NULL);
 		Ctx.SaveAndDefineItemVar(*this);
 
@@ -1217,6 +1254,7 @@ ICCItem *CItem::GetItemProperty (CCodeChainCtx &CCCtx, CItemCtx &Ctx, const CStr
 	{
 	CCodeChain &CC = g_pUniverse->GetCC();
 	ICCItem *pResult;
+	int i;
 
 	//	First we handle all properties that are specific to the item instance.
 
@@ -1268,6 +1306,19 @@ ICCItem *CItem::GetItemProperty (CCodeChainCtx &CCCtx, CItemCtx &Ctx, const CStr
 			return CC.CreateString(sRoot);
 		else
 			return CC.CreateString(strPatternSubst(CONSTLIT("%s, %s"), sRoot, sModifier));
+		}
+
+	else if (strEquals(sProperty, PROPERTY_TRADE_ID))
+		{
+		TArray<SDisplayAttribute> Attribs;
+		if (!GetDisplayAttributes(Ctx, &Attribs, NULL, true))
+			return CC.CreateNil();
+
+		for (i = 0; i < Attribs.GetCount(); i++)
+			if (!Attribs[i].sID.IsBlank())
+				return CC.CreateString(Attribs[i].sID);
+
+		return CC.CreateNil();
 		}
 
 	else if (strEquals(sProperty, PROPERTY_USED))
@@ -1411,6 +1462,7 @@ CString CItem::GetReference (CItemCtx &ItemCtx, const CItem &Ammo, DWORD dwFlags
 
 			Ctx.SetEvent(eventGetReferenceText);
 			Ctx.SetItemType(GetType());
+			Ctx.DefineContainingType(m_pItemType);
 			Ctx.SaveAndDefineSourceVar(ItemCtx.GetSource());
 			Ctx.SaveAndDefineItemVar(*this);
 
@@ -1556,6 +1608,7 @@ int CItem::GetTradePrice (CSpaceObject *pObj, bool bActual) const
 
 		Ctx.SetEvent(eventGetTradePrice);
 		Ctx.SetItemType(GetType());
+		Ctx.DefineContainingType(m_pItemType);
 		Ctx.SaveAndDefineSourceVar(pObj);
 		Ctx.SaveAndDefineItemVar(*this);
 		Ctx.DefineString(CONSTLIT("aPriceType"), (bActual ? CONSTLIT("actual") : CONSTLIT("normal")));
@@ -2903,6 +2956,7 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
 
 	{
 	CCodeChain &CC = g_pUniverse->GetCC();
+	CInstalledDevice *pDevice;
 
 	if (IsEmpty())
 		{
@@ -2987,21 +3041,17 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
         return true;
         }
 
+	//	If this is an installed device, then pass it on
+
+	else if (pDevice = Ctx.GetDevice())
+		return pDevice->SetProperty(Ctx, sName, pValue, retsError);
+
+	//	Otherwise, nothing
+
 	else
 		{
-		//	If this is a device, then pass it on
-
-		CDeviceClass *pDevice;
-		if (pDevice = GetType()->GetDeviceClass())
-			return pDevice->SetItemProperty(Ctx, sName, pValue, retsError);
-
-		//	Otherwise, nothing
-
-		else
-			{
-			*retsError = strPatternSubst(CONSTLIT("Unknown item property: %s."), sName);
-			return false;
-			}
+		*retsError = strPatternSubst(CONSTLIT("Unknown item property: %s."), sName);
+		return false;
 		}
 
 	return true;

@@ -54,6 +54,8 @@ enum ItemEnhancementTypes
 	etResistHPBonus =					0x1700,	//	resist damage
 												//		B = damage type
 												//		X = %bonus (if disadvantage, this is decrease)
+	etTracking =						0x1800,	//	weapon gains tracking
+												//		X = maneuver rate
 
 	etData1Mask =						0x000f,	//	4-bits of data (generally for damage adj)
 	etData2Mask =						0x00f0,	//	4-bits of data (generally for damage type)
@@ -120,6 +122,7 @@ class CItemEnhancement
 		inline DWORD GetID (void) const { return m_dwID; }
 		inline int GetLevel (void) const { return (int)(DWORD)(m_dwMods & etData1Mask); }
 		inline int GetLevel2 (void) const { return (int)(DWORD)((m_dwMods & etData2Mask) >> 4); }
+		int GetManeuverRate (void) const;
 		inline DWORD GetModCode (void) const { return m_dwMods; }
 		int GetPowerAdj (void) const;
 		int GetReflectChance (DamageTypes iDamage) const;
@@ -169,6 +172,7 @@ class CItemEnhancement
 		inline void SetModResistMatter (int iAdj) { m_dwMods = Encode12(etResistMatter | (iAdj > 100 ? etDisadvantage : 0), DamageAdj2Level(iAdj)); }
 		void SetModSpecialDamage (SpecialDamageTypes iSpecial, int iLevel = 0);
 		void SetModSpeed (int iAdj, int iMinDelay = 0, int iMaxDelay = 0);
+		void SetModTracking (int iManeuverRate);
 		bool UpdateArmorRegen (CItemCtx &ArmorCtx, SUpdateCtx &UpdateCtx, int iTick) const;
 		void WriteToStream (IWriteStream *pStream) const;
 
@@ -220,6 +224,7 @@ class CItemEnhancementStack
 		inline int GetCount (void) const { return m_Stack.GetCount(); }
 		const DamageDesc &GetDamage (void) const;
 		int GetDamageAdj (const DamageDesc &Damage) const;
+		int GetManeuverRate (void) const;
 		int GetPowerAdj (void) const;
 		int GetResistDamageAdj (DamageTypes iDamage) const;
 		int GetResistEnergyAdj (void) const;
@@ -238,6 +243,7 @@ class CItemEnhancementStack
 		bool IsRadiationImmune (void) const;
 		bool IsShatterImmune (void) const;
 		bool IsShieldInterfering (void) const;
+		inline bool IsTracking (void) const { return (GetManeuverRate() > 0); }
 		bool ReflectsDamage (DamageTypes iDamage, int *retiChance = NULL) const;
 		bool RepairOnDamage (DamageTypes iDamage) const;
 		bool UpdateArmorRegen (CItemCtx &ArmorCtx, SUpdateCtx &UpdateCtx, int iTick) const;
@@ -322,7 +328,8 @@ class CItem
 		inline int GetCount (void) const { return (int)m_dwCount; }
 		const CItemList &GetComponents (void) const;
 		inline CEconomyType *GetCurrencyType (void) const;
-		inline CString GetData (const CString &sAttrib) const { return (m_pExtra ? m_pExtra->m_Data.GetData(sAttrib) : NULL_STR); }
+//		inline CString GetData (const CString &sAttrib) const { return (m_pExtra ? m_pExtra->m_Data.GetData(sAttrib) : NULL_STR); }
+		ICCItemPtr GetDataAsItem (const CString &sAttrib) const;
 		CString GetDesc (CItemCtx &ItemCtx, bool bActual = false) const;
 		bool GetDisplayAttributes (CItemCtx &Ctx, TArray<SDisplayAttribute> *retList, ICCItem *pData = NULL, bool bActual = false) const;
 		DWORD GetDisruptedDuration (void) const;
@@ -367,7 +374,7 @@ class CItem
 		inline void SetCount (int iCount) { m_dwCount = (DWORD)iCount; }
 		inline void SetDamaged (void) { m_dwFlags |= flagDamaged; }
 		inline void SetDamaged (bool bDamaged) { ClearDamaged(); if (bDamaged) SetDamaged(); }
-		inline void SetData (const CString &sAttrib, const CString &sData) { Extra(); m_pExtra->m_Data.SetData(sAttrib, sData); }
+		inline void SetData (const CString &sAttrib, ICCItem *pData) { Extra(); m_pExtra->m_Data.SetData(sAttrib, pData); }
 		void SetDisrupted (DWORD dwDuration);
 		inline void SetEnhanced (void) { m_dwFlags |= flagEnhanced; }
 		inline void SetEnhanced (bool bEnhanced) { ClearEnhanced(); if (bEnhanced) SetEnhanced(); }
@@ -495,7 +502,7 @@ class CItemListManipulator
 		void SetChargesAtCursor (int iCharges, int iCount = 1);
 		void SetCountAtCursor (int iCount);
 		void SetDamagedAtCursor (bool bDamaged, int iCount = 1);
-		void SetDataAtCursor (const CString &sAttrib, const CString &sData, int iCount = 1);
+		void SetDataAtCursor (const CString &sAttrib, ICCItem *pData, int iCount = 1);
 		void SetDisruptedAtCursor (DWORD dwDuration, int iCount = 1);
 		void SetEnhancedAtCursor (bool bEnhanced);
 		void SetInstalledAtCursor (int iInstalled);
@@ -572,16 +579,33 @@ class CItemCtx
 struct SItemAddCtx
 	{
 	SItemAddCtx (CItemListManipulator &theItemList) : 
-			ItemList(theItemList),
-			pSystem(NULL),
-			iLevel(1)
+			ItemList(theItemList)
 		{ }
 
 	CItemListManipulator &ItemList;				//	Item list to add items to
 
-	CSystem *pSystem;							//	System where we're creating items
+	CSystem *pSystem = NULL;					//	System where we're creating items
+	CSpaceObject *pDest = NULL;					//	Object to add to (may be NULL)
 	CVector vPos;								//	Position to use (for LocationCriteriaTable)
-	int iLevel;									//	Level to use for item create (for LevelTable)
+	int iLevel = 1;								//	Level to use for item create (for LevelTable)
+	};
+
+class CItemTypeProbabilityTable
+	{
+	public:
+		void Add (CItemType *pType, Metric rProbability = 1.0);
+		void Add (const CItemTypeProbabilityTable &Src);
+		inline void DeleteAll (void) { m_Table.DeleteAll(); }
+		inline int GetCount (void) const { return m_Table.GetCount(); }
+		inline Metric GetProbability (int iIndex) const { return m_Table[iIndex]; }
+		inline Metric GetProbability (CItemType *pType) const { Metric *pProb = m_Table.GetAt(pType); return (pProb ? *pProb : 0.0); }
+		inline CItemType *GetType (int iIndex) const { return m_Table.GetKey(iIndex); }
+		void Scale (Metric rProbability);
+		void Union (CItemType *pType, Metric rProbability = 1.0);
+		void Union (const CItemTypeProbabilityTable &Src);
+
+	private:
+		TSortMap<CItemType *, Metric> m_Table;
 	};
 
 class IItemGenerator
@@ -601,6 +625,8 @@ class IItemGenerator
 		virtual int GetGeneratorCount (void) { return 0; }
 		virtual CItemType *GetItemType (int iIndex) { return NULL; }
 		virtual int GetItemTypeCount (void) { return 0; }
+		virtual CItemTypeProbabilityTable GetProbabilityTable (SItemAddCtx &Ctx) const { return CItemTypeProbabilityTable(); }
+		virtual bool HasItemAttribute (const CString &sAttrib) const { return false; }
 		virtual ALERROR LoadFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc) { return NOERROR; }
 		virtual ALERROR OnDesignLoadComplete (SDesignLoadCtx &Ctx) { return NOERROR; }
 	};

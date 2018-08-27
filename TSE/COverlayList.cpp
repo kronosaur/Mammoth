@@ -96,6 +96,88 @@ void COverlayList::AccumulateBounds (CSpaceObject *pSource, int iScale, int iRot
 		}
 	}
 
+void COverlayList::AddField (CSpaceObject *pSource, 
+								 COverlayType *pType,
+								 int iPosAngle,
+								 int iPosRadius,
+								 int iRotation,
+								 int iLifeLeft, 
+								 DWORD *retdwID)
+
+//	AddField
+//
+//	Adds a field of the given type to the head of the list
+
+	{
+	COverlay *pField;
+	COverlay::CreateFromType(pType, 
+			iPosAngle, 
+			iPosRadius, 
+			iRotation, 
+			iLifeLeft, 
+			&pField);
+
+	DWORD dwID = pField->GetID();
+
+	//	Add the field to the head of the list
+
+	pField->SetNext(m_pFirst);
+	m_pFirst = pField;
+
+	//	Call OnCreate
+
+	pField->FireOnCreate(pSource);
+
+	//	If we deleted, then we're done
+
+	if (pField->IsDestroyed())
+		{
+		COverlay *pNext = pField->GetNext();
+		m_pFirst = pNext;
+		delete pField;
+		pField = NULL;
+
+		dwID = 0;
+		}
+
+	//	NOTE: After this point we cannot guarantee that pField is valid, since
+	//	it may have been destroyed.
+
+	//	Either way, we need to recalculate impact
+
+	OnConditionsChanged(pSource);
+
+	//	Done
+
+	if (retdwID)
+		*retdwID = dwID;
+	}
+
+CConditionSet COverlayList::CalcConditions (CSpaceObject *pSource) const
+
+//	CalcConditions
+//
+//	Computes the conditions that we impart.
+
+	{
+	CConditionSet AllConditions;
+
+	COverlay *pField = m_pFirst;
+	while (pField)
+		{
+		if (!pField->IsDestroyed())
+			{
+			AllConditions.Set(pField->GetConditions(pSource));
+			}
+
+		//	Next
+
+		pField = pField->GetNext();
+		}
+
+	return AllConditions;
+	}
+
 bool COverlayList::Damage (CSpaceObject *pSource, SDamageCtx &Ctx)
 
 //	Damage
@@ -152,7 +234,47 @@ CString COverlayList::DebugCrashInfo (void) const
 		}
 	}
 
-bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, int *retiPriority, ICCItem **retpData) const
+bool COverlayList::DestroyDeleted (void)
+
+//	DestroyDeleted
+//
+//	Destroy any deleted/expired overlays. Returns TRUE if any where deleted.
+
+	{
+	bool bModified = false;
+
+	COverlay *pField = m_pFirst;
+	COverlay *pPrevField = NULL;
+	while (pField)
+		{
+		COverlay *pNext = pField->GetNext();
+
+		//	If this overlay was destroyed, handle that now
+
+		if (pField->IsDestroyed()
+				&& !pField->IsFading())
+			{
+			delete pField;
+
+			if (pPrevField)
+				pPrevField->SetNext(pNext);
+			else
+				m_pFirst = pNext;
+
+			bModified = true;
+			}
+		else
+			pPrevField = pField;
+
+		//	Next energy field
+
+		pField = pNext;
+		}
+
+	return bModified;
+	}
+
+bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, int *retiPriority, ICCItemPtr *retpData) const
 
 //	FireGetDockScreen
 //
@@ -164,7 +286,7 @@ bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen
 
 	CString sBestScreen;
 	int iBestPriority = -1;
-	ICCItem *pBestData = NULL;
+	ICCItemPtr pBestData;
 
 	COverlay *pField = m_pFirst;
 	while (pField)
@@ -173,7 +295,7 @@ bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen
 			{
 			CString sScreen;
 			int iPriority;
-			ICCItem *pData;
+			ICCItemPtr pData;
 
 			if (pField->FireGetDockScreen(pSource, &sScreen, &iPriority, &pData))
 				{
@@ -181,14 +303,8 @@ bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen
 					{
 					sBestScreen = sScreen;
 					iBestPriority = iPriority;
-
-					if (pBestData)
-						pBestData->Discard(&CC);
-
 					pBestData = pData;
 					}
-				else
-					pData->Discard(&CC);
 				}
 			}
 
@@ -206,8 +322,6 @@ bool COverlayList::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen
 
 	if (retpData)
 		*retpData = pBestData;
-	else
-		pBestData->Discard(&CC);
 
 	return true;
 	}
@@ -233,7 +347,7 @@ int COverlayList::GetCountOfType (COverlayType *pType)
 	return iCount;
 	}
 
-void COverlayList::GetImpact (CSpaceObject *pSource, SImpactDesc *retImpact) const
+bool COverlayList::GetImpact (CSpaceObject *pSource, COverlay::SImpactDesc &Impact) const
 
 //	GetImpact
 //
@@ -242,36 +356,20 @@ void COverlayList::GetImpact (CSpaceObject *pSource, SImpactDesc *retImpact) con
 	{
 	DEBUG_TRY
 
+	bool bHasImpact = false;
 	COverlay *pField = m_pFirst;
 	while (pField)
 		{
 		if (!pField->IsDestroyed())
 			{
-			//	Do we disarm the source?
+			COverlay::SImpactDesc FieldImpact;
+			if (pField->GetImpact(pSource, FieldImpact))
+				{
+				Impact.Conditions.Set(FieldImpact.Conditions);
+				Impact.rDrag *= FieldImpact.rDrag;
 
-			if (pField->Disarms(pSource))
-				retImpact->bDisarm = true;
-
-			//	Do we paralyze the source?
-
-			if (pField->Paralyzes(pSource))
-				retImpact->bParalyze = true;
-
-			//	Can't bring up ship status
-
-			if (pField->IsShipScreenDisabled())
-				retImpact->bShipScreenDisabled = true;
-
-			//	Do we spin the source ?
-
-			if (pField->Spins(pSource))
-				retImpact->bSpin = true;
-
-			//	Get appy drag
-
-			Metric rDrag;
-			if ((rDrag = pField->GetDrag(pSource)) < 1.0)
-				retImpact->rDrag *= rDrag;
+				bHasImpact = true;
+				}
 			}
 
 		//	Next
@@ -279,56 +377,8 @@ void COverlayList::GetImpact (CSpaceObject *pSource, SImpactDesc *retImpact) con
 		pField = pField->GetNext();
 		}
 
+	return bHasImpact;
 	DEBUG_CATCH
-	}
-
-void COverlayList::AddField (CSpaceObject *pSource, 
-								 COverlayType *pType,
-								 int iPosAngle,
-								 int iPosRadius,
-								 int iRotation,
-								 int iLifeLeft, 
-								 DWORD *retdwID)
-
-//	AddField
-//
-//	Adds a field of the given type to the head of the list
-
-	{
-	COverlay *pField;
-	COverlay::CreateFromType(pType, 
-			iPosAngle, 
-			iPosRadius, 
-			iRotation, 
-			iLifeLeft, 
-			&pField);
-
-	//	Add the field to the head of the list
-
-	pField->SetNext(m_pFirst);
-	m_pFirst = pField;
-
-	//	Call OnCreate
-
-	pField->FireOnCreate(pSource);
-
-	//	If we deleted, then we're done
-
-	if (pField->IsDestroyed())
-		{
-		COverlay *pNext = pField->GetNext();
-		m_pFirst = pNext;
-		delete pField;
-
-		if (retdwID)
-			*retdwID = 0;
-		return;
-		}
-
-	//	Done
-
-	if (retdwID)
-		*retdwID = pField->GetID();
 	}
 
 void COverlayList::FireOnObjDestroyed (CSpaceObject *pSource, const SDestroyCtx &Ctx) const
@@ -369,7 +419,7 @@ void COverlayList::FireOnObjDocked (CSpaceObject *pSource, CSpaceObject *pShip) 
 		}
 	}
 
-const CString &COverlayList::GetData (DWORD dwID, const CString &sAttrib)
+ICCItemPtr COverlayList::GetData (DWORD dwID, const CString &sAttrib) const
 
 //	GetData
 //
@@ -388,7 +438,7 @@ const CString &COverlayList::GetData (DWORD dwID, const CString &sAttrib)
 		pField = pField->GetNext();
 		}
 
-	return NULL_STR;
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
 	}
 
 void COverlayList::GetList (TArray<COverlay *> *retList)
@@ -552,7 +602,7 @@ int COverlayList::GetWeaponBonus (CInstalledDevice *pDevice, CSpaceObject *pSour
 	return iBonus;
 	}
 
-void COverlayList::IncData (DWORD dwID, const CString &sAttrib, ICCItem *pValue, ICCItem **retpNewValue)
+ICCItemPtr COverlayList::IncData (DWORD dwID, const CString &sAttrib, ICCItem *pValue)
 
 //  IncData
 //
@@ -563,16 +613,42 @@ void COverlayList::IncData (DWORD dwID, const CString &sAttrib, ICCItem *pValue,
 	while (pField)
 		{
 		if (pField->GetID() == dwID && !pField->IsDestroyed())
-			return pField->IncData(sAttrib, pValue, retpNewValue);
+			return pField->IncData(sAttrib, pValue);
 
 		pField = pField->GetNext();
 		}
 
     //  If we get this far, then we couldn't find it, so we just return nil
 
-    if (retpNewValue)
-        *retpNewValue = g_pUniverse->GetCC().CreateNil();
+	return ICCItemPtr(g_pUniverse->GetCC().CreateNil());
     }
+
+void COverlayList::OnConditionsChanged (CSpaceObject *pSource)
+
+//	OnConditionsChanged
+//
+//	Imparted conditions may have changed, so notify source.
+
+	{
+	int i;
+
+	CConditionSet OldConditions = m_Conditions;
+	m_Conditions = CalcConditions(pSource);
+
+	//	See what changed.
+
+	TArray<CConditionSet::ETypes> Added;
+	TArray<CConditionSet::ETypes> Removed;
+
+	if (m_Conditions.Diff(OldConditions, Added, Removed))
+		{
+		for (i = 0; i < Added.GetCount(); i++)
+			pSource->OnOverlayConditionChanged(Added[i], CConditionSet::cndAdded);
+
+		for (i = 0; i < Removed.GetCount(); i++)
+			pSource->OnOverlayConditionChanged(Removed[i], CConditionSet::cndRemoved);
+		}
+	}
 
 void COverlayList::Paint (CG32bitImage &Dest, int iScale, int x, int y, SViewportPaintCtx &Ctx)
 
@@ -704,6 +780,11 @@ void COverlayList::ReadFromStream (SLoadCtx &Ctx, CSpaceObject *pSource)
 		pPrevField = pField;
 		dwCount--;
 		}
+
+	//	Recalc conditions
+
+	if (m_pFirst)
+		m_Conditions = CalcConditions(pSource);
 	}
 
 void COverlayList::RemoveField (CSpaceObject *pSource, DWORD dwID)
@@ -721,6 +802,10 @@ void COverlayList::RemoveField (CSpaceObject *pSource, DWORD dwID)
 		if (pField->GetID() == dwID)
 			{
 			pField->Destroy(pSource);
+
+			//	Recalc conditions
+
+			OnConditionsChanged(pSource);
 			return;
 			}
 
@@ -759,7 +844,7 @@ void COverlayList::ScrapeHarmfulOverlays (CSpaceObject *pSource, int iMaxRemoved
 		}
 	}
 
-void COverlayList::SetData (DWORD dwID, const CString &sAttrib, const CString &sData)
+void COverlayList::SetData (DWORD dwID, const CString &sAttrib, ICCItem *pData)
 
 //	SetData
 //
@@ -770,7 +855,7 @@ void COverlayList::SetData (DWORD dwID, const CString &sAttrib, const CString &s
 	while (pField)
 		{
 		if (pField->GetID() == dwID && !pField->IsDestroyed())
-			return pField->SetData(sAttrib, sData);
+			return pField->SetData(sAttrib, pData);
 
 		pField = pField->GetNext();
 		}
@@ -859,6 +944,7 @@ void COverlayList::Update (CSpaceObject *pSource, int iScale, int iRotation, boo
 	DEBUG_TRY
 
 	bool bModified = false;
+	bool bDestroyed = false;
 
 	//	First update all fields
 
@@ -868,10 +954,16 @@ void COverlayList::Update (CSpaceObject *pSource, int iScale, int iRotation, boo
 		if (!pField->IsDestroyed()
 				|| pField->IsFading())
 			{
+			bool bIsDestroyed = pField->IsDestroyed();
 			bool bOverlayModified;
 
 			pField->Update(pSource, iScale, iRotation, &bOverlayModified);
-			if (bOverlayModified)
+			if (!bIsDestroyed && pField->IsDestroyed())
+				{
+				bDestroyed = true;
+				bModified = true;
+				}
+			else if (bOverlayModified)
 				bModified = true;
 
 			//	If the source got destroyed, then we're done
@@ -883,37 +975,75 @@ void COverlayList::Update (CSpaceObject *pSource, int iScale, int iRotation, boo
 		pField = pField->GetNext();
 		}
 
+	//	Recalc conditions
+
+	if (bDestroyed)
+		OnConditionsChanged(pSource);
+
 	//	Do a second pass in which we destroy fields marked for deletion
 
-	pField = m_pFirst;
-	COverlay *pPrevField = NULL;
+	if (DestroyDeleted())
+		bModified = true;
+
+	if (retbModified) *retbModified = bModified;
+
+	DEBUG_CATCH
+	}
+
+void COverlayList::UpdateTimeStopped (CSpaceObject *pSource, int iScale, int iRotation, bool *retbModified)
+
+//	UpdateTimeStopped
+//
+//	Update fields. Returns bModified = TRUE if any field changed such that the object
+//	need to be recalculated.
+
+	{
+	DEBUG_TRY
+
+	bool bModified = false;
+	bool bDestroyed = false;
+
+	//	First update all fields
+
+	COverlay *pField = m_pFirst;
 	while (pField)
 		{
-		COverlay *pNext = pField->GetNext();
-
-		//	If this overlay was destroyed, handle that now
-
-		if (pField->IsDestroyed()
-				&& !pField->IsFading())
+		if (pField->GetType()->StopsTime()
+				&& (!pField->IsDestroyed()
+					|| pField->IsFading()))
 			{
-			delete pField;
+			bool bIsDestroyed = pField->IsDestroyed();
+			bool bOverlayModified;
 
-			if (pPrevField)
-				pPrevField->SetNext(pNext);
-			else
-				m_pFirst = pNext;
+			pField->Update(pSource, iScale, iRotation, &bOverlayModified);
+			if (!bIsDestroyed && pField->IsDestroyed())
+				{
+				bDestroyed = true;
+				bModified = true;
+				}
+			else if (bOverlayModified)
+				bModified = true;
 
-			bModified = true;
+			//	If the source got destroyed, then we're done
+
+			if (CSpaceObject::IsDestroyedInUpdate())
+				return;
 			}
-		else
-			pPrevField = pField;
 
-		//	Next energy field
-
-		pField = pNext;
+		pField = pField->GetNext();
 		}
 
-	*retbModified = bModified;
+	//	Recalc conditions
+
+	if (bDestroyed)
+		OnConditionsChanged(pSource);
+
+	//	Do a second pass in which we destroy fields marked for deletion
+
+	if (DestroyDeleted())
+		bModified = true;
+
+	if (retbModified) *retbModified = bModified;
 
 	DEBUG_CATCH
 	}
@@ -927,7 +1057,7 @@ void COverlayList::WriteToStream (IWriteStream *pStream)
 //	COverlay array
 
 	{
-	//	NOTE: We have to saved destroyed overlays because we need to run some 
+	//	NOTE: We have to save destroyed overlays because we need to run some 
 	//	code when removing an overlay (e.g., see CShip::CalcOverlayImpact).
 
 	DWORD dwSave = 0;
