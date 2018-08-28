@@ -1426,6 +1426,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			
 			"   'ok\n"
 			"   'armorTooHeavy\n"
+			"   'armorTooLight\n"
 			"   'cannotInstall\n"
 			"   'noDeviceSlotsLeft\n"
 			"   'noNonWeaponSlotsLeft\n"

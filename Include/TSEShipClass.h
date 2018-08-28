@@ -26,6 +26,7 @@ class CHullDesc
 		inline int GetMaxNonWeapons (void) const { return m_iMaxNonWeapons; }
 		inline int GetMaxReactorPower (void) const { return m_iMaxReactorPower; }
 		inline int GetMaxWeapons (void) const { return m_iMaxWeapons; }
+		inline int GetMinArmorMass (void) const { return m_iMinArmorMass; }
 		inline int GetMinArmorSpeedBonus (void) const { return m_iMinArmorSpeedBonus; }
 		inline int GetSize (void) const { return m_iSize; }
 		inline int GetStdArmorMass (void) const { return m_iStdArmorMass; }
@@ -51,6 +52,7 @@ class CHullDesc
 		int m_iStdArmorMass = 0;			//	No penalty at this armor mass
 		int m_iMaxArmorMass = 0;			//	Max mass of single armor segment
 		int m_iMaxArmorSpeedPenalty = 0;	//	Change to speed at max armor mass (1/100th light-speed)
+		int m_iMinArmorMass = 0;			//	Min mass of single armor segment
 		int m_iMinArmorSpeedBonus = 0;		//	Change to speed at 1/2 std armor mass
 
 		int m_iMaxCargoSpace = 0;			//	Max amount of cargo space with expansion (tons)

@@ -1059,11 +1059,13 @@ void CUIHelper::PaintItemEntry (CG32bitImage &Dest, CSpaceObject *pSource, const
 					0,
 					&cyHeight);
 
-			if (iSpeedBonus == 0)
-				Medium.DrawText(Dest, cx, rcDrawRect.top, rgbDisadvantage, CONSTLIT("too heavy"), iSpeedBonus);
+			if (iSpeedBonus == INT_MIN)
+				Medium.DrawText(Dest, cx, rcDrawRect.top, rgbDisadvantage, CONSTLIT("too heavy"));
+			else if (iSpeedBonus == INT_MAX)
+				Medium.DrawText(Dest, cx, rcDrawRect.top, rgbDisadvantage, CONSTLIT("too light"));
 			else if (iSpeedBonus > 0)
 				Medium.DrawText(Dest, cx, rcDrawRect.top, rgbColorRef, strPatternSubst(CONSTLIT("+.%02dc bonus"), iSpeedBonus));
-			else
+			else if(iSpeedBonus < 0)
 				Medium.DrawText(Dest, cx, rcDrawRect.top, rgbDisadvantage, strPatternSubst(CONSTLIT("-.%02dc penalty"), -iSpeedBonus));
 
 			rcDrawRect.top += cyHeight;

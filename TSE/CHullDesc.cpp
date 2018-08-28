@@ -20,6 +20,7 @@
 #define MAX_NON_WEAPONS_ATTRIB					CONSTLIT("maxNonWeapons")
 #define MAX_REACTOR_POWER_ATTRIB				CONSTLIT("maxReactorPower")
 #define MAX_WEAPONS_ATTRIB						CONSTLIT("maxWeapons")
+#define MIN_ARMOR_ATTRIB					CONSTLIT("minArmor")
 #define MIN_ARMOR_SPEED_ATTRIB					CONSTLIT("minArmorSpeed")
 #define SIZE_ATTRIB								CONSTLIT("size")
 #define STD_ARMOR_ATTRIB						CONSTLIT("stdArmor")
@@ -75,7 +76,8 @@ int CHullDesc::CalcArmorSpeedBonus (int iSegmentCount, int iTotalArmorMass) cons
 
 	else
 		{
-		if (m_iMinArmorSpeedBonus > 0)
+		if (m_iMinArmorSpeedBonus > 0
+				&& m_iMinArmorMass < m_iStdArmorMass)
 			{
 			int iMinTotalArmorMass = m_iStdArmorMass * iSegmentCount / 2;
 			int iRange = iStdTotalArmorMass - iMinTotalArmorMass;
@@ -156,8 +158,7 @@ int CHullDesc::CalcMinArmorMassForSpeed (int iSpeed, int iStdSpeed) const
 	int iPenaltyRange = m_iMaxArmorMass - m_iStdArmorMass;
 	int iPenaltyMassPerPoint = iPenaltyRange / (1 - m_iMaxArmorSpeedPenalty);
 
-	int iMinArmorMass = m_iStdArmorMass / 2;
-	int iBonusRange = m_iStdArmorMass - iMinArmorMass;
+	int iBonusRange = m_iStdArmorMass - m_iMinArmorMass;
 	int iBonusMassPerPoint = (m_iMinArmorSpeedBonus > 0 ? iBonusRange / m_iMinArmorSpeedBonus : 0);
 
 	if (iSpeed < iStdSpeed)
@@ -209,6 +210,8 @@ void CHullDesc::InitDefaultArmorLimits (int iMaxSpeed, Metric rThrustRatio)
 
 	int iStdArmorTons = mathRound(STD_ARMOR_FACTOR * pow((Metric)iMaxArmorTons, STD_ARMOR_POWER));
 	m_iStdArmorMass = 1000 * iStdArmorTons;
+
+	m_iMinArmorMass = m_iStdArmorMass / 2;
 
 	//	Compute the max speed at maximum armor
 
@@ -275,7 +278,8 @@ ALERROR CHullDesc::InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, int iMa
 	//	Armor limits
 
 	m_iMaxArmorMass = pHull->GetAttributeInteger(MAX_ARMOR_ATTRIB);
-	m_iStdArmorMass = pHull->GetAttributeIntegerBounded(STD_ARMOR_ATTRIB, 0, m_iMaxArmorMass, m_iMaxArmorMass / 2);
+	m_iMinArmorMass = pHull->GetAttributeInteger(MIN_ARMOR_ATTRIB);
+	m_iStdArmorMass = pHull->GetAttributeIntegerBounded(STD_ARMOR_ATTRIB, 0, m_iMaxArmorMass, (m_iMinArmorMass + m_iMaxArmorMass) / 2);
 	m_iMaxArmorSpeedPenalty = pHull->GetAttributeIntegerBounded(MAX_ARMOR_SPEED_ATTRIB, 0, iMaxSpeed, iMaxSpeed) - iMaxSpeed;
 	m_iMinArmorSpeedBonus = pHull->GetAttributeIntegerBounded(MIN_ARMOR_SPEED_ATTRIB, iMaxSpeed, 100, iMaxSpeed) - iMaxSpeed;
 

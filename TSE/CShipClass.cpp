@@ -71,6 +71,7 @@
 #define MAX_REACTOR_POWER_ATTRIB				CONSTLIT("maxReactorPower")
 #define MAX_SPEED_ATTRIB						CONSTLIT("maxSpeed")
 #define MAX_WEAPONS_ATTRIB						CONSTLIT("maxWeapons")
+#define MIN_ARMOR_ATTRIB						CONSTLIT("minArmor")
 #define MIN_ARMOR_SPEED_ATTRIB					CONSTLIT("minArmorSpeed")
 #define NAME_ATTRIB								CONSTLIT("name")
 #define NAME_BREAK_WIDTH						CONSTLIT("nameBreakWidth")
@@ -135,6 +136,7 @@
 #define FIELD_MAX_ROTATION						CONSTLIT("maxRotation")
 #define FIELD_MAX_SPEED							CONSTLIT("maxSpeed")
 #define FIELD_MAX_STRUCTURAL_HP					CONSTLIT("maxStructuralHP")
+#define FIELD_MIN_ARMOR_MASS					CONSTLIT("minArmorMass")
 #define FIELD_NAME								CONSTLIT("name")
 #define FIELD_PLAYER_DESC						CONSTLIT("playerDesc")
 #define FIELD_PRIMARY_ARMOR						CONSTLIT("primaryArmor")
@@ -184,6 +186,7 @@
 #define PROPERTY_MAX_SPEED_AT_MAX_ARMOR			CONSTLIT("maxSpeedAtMaxArmor")
 #define PROPERTY_MAX_SPEED_AT_MIN_ARMOR			CONSTLIT("maxSpeedAtMinArmor")
 #define PROPERTY_MAX_SPEED_BY_ARMOR_MASS		CONSTLIT("maxSpeedByArmorMass")
+#define PROPERTY_MIN_ARMOR_MASS					CONSTLIT("minArmorMass")
 #define PROPERTY_POWER							CONSTLIT("power")
 #define PROPERTY_STD_ARMOR_MASS					CONSTLIT("stdArmorMass")
 #define PROPERTY_THRUST							CONSTLIT("thrust")
@@ -1951,6 +1954,8 @@ bool CShipClass::FindDataField (const CString &sField, CString *retsValue) const
 		*retsValue = GetGenericName();
 	else if (strEquals(sField, FIELD_MAX_ARMOR_MASS))
 		*retsValue = strFromInt(m_Hull.GetMaxArmorMass());
+	else if (strEquals(sField, FIELD_MIN_ARMOR_MASS))
+		*retsValue = strFromInt(m_Hull.GetMinArmorMass());
 	else if (strEquals(sField, FIELD_HULL_MASS))
 		*retsValue = strFromInt(m_Hull.GetMass());
 	else if (strEquals(sField, FIELD_DEVICE_SLOTS))
@@ -3762,10 +3767,10 @@ ICCItemPtr CShipClass::OnGetProperty (CCodeChainCtx &Ctx, const CString &sProper
 
 	if (strEquals(sProperty, PROPERTY_CURRENCY))
 		return ICCItemPtr(CC.CreateInteger(GetEconomyType()->GetUNID()));
-		
+
 	else if (strEquals(sProperty, PROPERTY_CURRENCY_NAME))
 		return ICCItemPtr(CC.CreateString(GetEconomyType()->GetSID()));
-		
+
 	else if (strEquals(sProperty, PROPERTY_DEFAULT_SOVEREIGN))
 		return (m_pDefaultSovereign.GetUNID() ? ICCItemPtr(CC.CreateInteger(m_pDefaultSovereign.GetUNID())) : ICCItemPtr(CC.CreateNil()));
 
@@ -3789,6 +3794,9 @@ ICCItemPtr CShipClass::OnGetProperty (CCodeChainCtx &Ctx, const CString &sProper
 
 	else if (strEquals(sProperty, PROPERTY_MAX_SPEED_BY_ARMOR_MASS))
 		return ICCItemPtr(CalcMaxSpeedByArmorMass(Ctx));
+
+	else if (strEquals(sProperty, PROPERTY_MIN_ARMOR_MASS))
+		return ICCItemPtr(CC.CreateInteger(m_Hull.GetMinArmorMass()));
 
 	else if (strEquals(sProperty, PROPERTY_STD_ARMOR_MASS))
 		return (m_Hull.GetStdArmorMass() > 0 ? ICCItemPtr(CC.CreateInteger(m_Hull.GetStdArmorMass())) : ICCItemPtr(CC.CreateNil()));

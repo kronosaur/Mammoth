@@ -61,6 +61,14 @@ void CUIHelper::CreateClassInfoArmor (CShipClass *pClass, int x, int y, int cxWi
 	else
 		sMaxArmor = strPatternSubst(CONSTLIT("%d.%d"), pClass->GetHullDesc().GetMaxArmorMass() / 1000, ((pClass->GetHullDesc().GetMaxArmorMass() % 1000) + 50) / 100);
 
+	//	Compute the min armor limit too
+
+	CString sMinArmor;
+	if ((pClass->GetHullDesc().GetMinArmorMass() % 1000) == 0)
+		sMaxArmor = strPatternSubst(CONSTLIT("%d"), pClass->GetHullDesc().GetMinArmorMass() / 1000);
+	else
+		sMaxArmor = strPatternSubst(CONSTLIT("%d.%d"), pClass->GetHullDesc().GetMinArmorMass() / 1000, ((pClass->GetHullDesc().GetMinArmorMass() % 1000) + 50) / 100);
+
 	//	Info
 
 	CreateClassInfoItem(ArmorItem, 
@@ -68,7 +76,7 @@ void CUIHelper::CreateClassInfoArmor (CShipClass *pClass, int x, int y, int cxWi
 			y, 
 			cxWidth, 
 			dwOptions, 
-			strPatternSubst(CONSTLIT("\noptional upgrade up to %s ton segments"), sMaxArmor),
+			strPatternSubst(CONSTLIT("\noptional upgrade up to %s ton segments.\noptional downgrade down to %s ton segments"), sMaxArmor, sMinArmor),
 			retcyHeight, 
 			retpInfo);
 	}

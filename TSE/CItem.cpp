@@ -1569,7 +1569,10 @@ bool CItem::GetReferenceSpeedBonus (CItemCtx &Ctx, DWORD dwFlags, int *retiSpeed
 //	ship class.
 //
 //	If the armor is too heavy to be used by the ship class, we return TRUE but
-//	retiSpeedBonus is set to 0.
+//	retiSpeedBonus is set to INT_MIN.
+//
+//	If the armor is too light to be used by the ship class, we return TRUE but
+//	retiSpeedBonus is set to INT_MAX
 
 	{
 	CArmorClass *pArmor;
