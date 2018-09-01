@@ -126,6 +126,7 @@ static SImageInitTable IMAGE_TABLE[] =
 
 		{	"ProfileIcon",			"JPEG_UI_ICONS",				"BMP_UI_ICONS_MASK",			  0,	  0,	 64,	 64, },
 		{	"ModExchangeIcon",		"JPEG_UI_ICONS",				"BMP_UI_ICONS_MASK",			  0,	 64,	 64,	 64, },
+		{	"ExtensionsIcon",		"JPEG_UI_ICONS",				"BMP_UI_ICONS_MASK",			  64,	 576,	 64,	 64, },
 		{	"MusicIconOn",			"JPEG_UI_ICONS",				"BMP_UI_ICONS_MASK",			  0,	128,	 64,	 64, },
 		{	"MusicIconOff",			"JPEG_UI_ICONS",				"BMP_UI_ICONS_MASK",			 64,	128,	 64,	 64, },
 

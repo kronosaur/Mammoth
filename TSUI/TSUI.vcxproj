@@ -171,6 +171,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='SteamRelease|Win32'">Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="CListCollectionTask.cpp" />
+	<ClCompile Include="CListExtensionsTask.cpp" />
     <ClCompile Include="CMapLegendPainter.cpp" />
     <ClCompile Include="CMapScaleCounter.cpp" />
     <ClCompile Include="CMCIMixer.cpp" />

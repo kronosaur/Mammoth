@@ -93,6 +93,9 @@
     <ClCompile Include="CListCollectionTask.cpp">
       <Filter>Source Files\UIHelpers</Filter>
     </ClCompile>
+	<ClCompile Include="CListExtensionsTask.cpp">
+      <Filter>Source Files\UIHelpers</Filter>
+    </ClCompile>
     <ClCompile Include="Run.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
