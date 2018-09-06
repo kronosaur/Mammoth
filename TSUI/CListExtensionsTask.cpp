@@ -229,8 +229,8 @@ void CListExtensionsTask::CreateEntry (CExtension *pExtension, int yStart, IAnim
 		y += RectHeight(rcLine);
 	}
 
-	//	Add UNID
-		{
+	//	Add UNID (only in debug mode)
+	if(m_bDebugMode) {
 		CString sUNID = strPatternSubst("UNID: %x", pExtension->GetUNID());
 
 		IAnimatron *pUNID = new CAniText;
@@ -309,6 +309,8 @@ ALERROR CListExtensionsTask::OnExecute (ITaskProcessor *pProcessor, CString *ret
 	for (i = 0; i < ExtensionList.GetCount(); i++)
 		{
 		CExtension* pExtension = ExtensionList.GetAt(i);
+
+		//	Exclude registered extensions (which belong in Collection)
 
 		if (pExtension->IsRegistered())
 			continue;
