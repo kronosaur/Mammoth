@@ -1664,6 +1664,19 @@ ALERROR CStationType::OnCreateFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc)
 	if (error = m_pGateEffect.LoadUNID(Ctx, pDesc->GetAttribute(GATE_EFFECT_ATTRIB)))
 		return error;
 
+	CString sTransitionEffect;
+	if (pDesc->FindAttribute("transitionEffect", &sTransitionEffect))
+		{
+		if (strEquals(sTransitionEffect, CONSTLIT("stargate")))
+			m_pTransitionEffect = transitionStargate;
+		else if (strEquals(sTransitionEffect, CONSTLIT("automata")))
+			m_pTransitionEffect = transitionAutomata;
+		else
+			return ComposeLoadError(Ctx, strPatternSubst(CONSTLIT("Invalid transitionEffect attribute: %s. Valid values are \"stargate\" and \"automata\""), sTransitionEffect));
+		}
+	else
+		m_pTransitionEffect = transitionStargate;
+
 	//	Miscellaneous
 
 	if (error = m_pBarrierEffect.LoadUNID(Ctx, pDesc->GetAttribute(BARRIER_EFFECT_ATTRIB)))

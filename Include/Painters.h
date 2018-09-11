@@ -49,8 +49,13 @@ class CHoverDescriptionPainter
 		mutable RECT m_rcText;				//	Rect of text area
 		mutable CTextBlock m_DescriptionRTF;	//	Rich text to draw
 	};
-
-class CStargateEffectPainter
+class ITransitionEffectPainter
+	{
+	public:
+		virtual void Paint (CG32bitImage &Dest, const RECT &rcRect) { };
+		virtual void Update (void) { };
+	};
+class CStargateEffectPainter : public ITransitionEffectPainter
 	{
 	public:
 		CStargateEffectPainter (void);
@@ -105,7 +110,7 @@ class CStargateEffectPainter
 		Metric m_rGlowVel;
 		Metric m_rGlowRadius;
 	};
-class CAutomataEffectPainter
+class CAutomataEffectPainter : public ITransitionEffectPainter
 	{
 	public:
 		CAutomataEffectPainter (int width, int height);

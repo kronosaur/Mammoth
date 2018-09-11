@@ -296,6 +296,7 @@ class CReactorClass : public CDeviceClass
 
 		const CReactorDesc *GetReactorDesc (CItemCtx &Ctx, DWORD dwFlags = 0) const;
 		int GetMaxPower (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
+		Metric GetMaxFuel (CItemCtx &ItemCtx, const CReactorDesc &Desc) const;
         void InitDamagedDesc (void) const;
         void InitEnhancedDesc (void) const;
 
@@ -308,6 +309,7 @@ class CReactorClass : public CDeviceClass
 		//	Other properties
 
 		int m_iExtraPowerPerCharge;			//	Adds to max power
+		int m_iExtraFuelPerCharge;			//	Adds to max fuel
 
         //  Damaged/enhanced
         //  We allocate these as needed; the array matches m_pDesc
@@ -555,8 +557,9 @@ class CWeaponClass : public CDeviceClass
 			{
 			evtOnFireWeapon				= 0,
 			evtGetAmmoToConsume			= 1,
+      evtOnCounterCooldown			= 2,
 
-			evtCount					= 2,
+			evtCount					= 3,
 			};
 
         struct SBalance
@@ -755,6 +758,7 @@ class CWeaponClass : public CDeviceClass
 		int FireGetAmmoToConsume(CItemCtx &ItemCtx,
 							  CWeaponFireDesc *pShot,
 							  int iRepeatingCount);
+    void FireOnCounterCooldown (CItemCtx &ItemCtx);
 		EOnFireWeaponResults FireOnFireWeapon (CItemCtx &ItemCtx, 
 											   CWeaponFireDesc *pShot,
 											   const CVector &vSource,
@@ -819,6 +823,7 @@ class CWeaponClass : public CDeviceClass
 		int m_iCounterUpdateRate;				//	Ticks to update counter
 		int m_iCounterUpdate;					//	Inc/dec value per update
 		int m_iCounterActivate;					//	Inc/dec value per shot
+		int m_iCounterPowerUse;					//	Power use when counter is updating
 
 		bool m_bTargetStationsOnly;				//	Do not target ships
 

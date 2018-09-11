@@ -595,6 +595,7 @@ class CWeaponFireDesc
 
 		//	Missile stuff (m_iFireType == ftMissile)
 		int m_iAccelerationFactor;			//	% increase in speed per 10 ticks
+		int m_iAccelerationInc;				//	Numerical increase in speed per 10 ticks
 		Metric m_rMaxMissileSpeed;			//	Max speed.
 		int m_iStealth;						//	Missile stealth
 		int m_iHitPoints;					//	HP before dissipating (0 = destroyed by any hit)

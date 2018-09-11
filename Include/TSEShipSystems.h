@@ -553,10 +553,12 @@ class CReactorDesc
         CString GetFuelCriteriaString (void) const;
         void GetFuelLevel (int *retiMin, int *retiMax) const;
         inline int GetMaxPower (void) const { return m_iMaxPower; }
+		inline Metric GetMaxFuel (void) const { return m_rMaxFuel; }
         ALERROR InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, DWORD dwUNID, bool bShipClass = false);
         ALERROR InitScaled (SDesignLoadCtx &Ctx, const CReactorDesc &Src, int iBaseLevel, int iScaledLevel);
         bool IsFuelCompatible (const CItem &FuelItem) const;
 		inline void SetMaxPower (int iPower) { m_iMaxPower = iPower; }
+		inline void SetMaxFuel (Metric rMaxFuel) { m_rMaxFuel = rMaxFuel; }
 		inline bool UsesFuel (void) const { return (m_fNoFuel ? false : true); }
 
         static const SStdStats &GetStdStats (int iLevel);

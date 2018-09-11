@@ -17,6 +17,7 @@
 #define PARTICLE_SYSTEM_TAG						CONSTLIT("ParticleSystem")
 
 #define ACCELERATION_FACTOR_ATTRIB				CONSTLIT("accelerationFactor")
+#define ACCELERATION_INC_ATTRIB					CONSTLIT("accelerationInc")
 #define AMMO_ID_ATTRIB							CONSTLIT("ammoID")
 #define AREA_DAMAGE_DENSITY_ATTRIB				CONSTLIT("areaDamageDensity")
 #define AUTO_TARGET_ATTRIB						CONSTLIT("autoAcquireTarget")
@@ -190,9 +191,31 @@ void CWeaponFireDesc::ApplyAcceleration (CSpaceObject *pMissile) const
     {
 	if (m_iAccelerationFactor > 0)
 		{
-		if (m_iAccelerationFactor < 100
-				|| pMissile->GetVel().Length() < m_rMaxMissileSpeed)
-			pMissile->SetVel(pMissile->GetVel() * (Metric)(m_iAccelerationFactor / 100.0));
+		pMissile->SetVel(pMissile->GetVel() * (Metric)(m_iAccelerationFactor / 100.0));
+
+		//	Truncate to maxMissileSpeed if necessary
+		if (pMissile->GetVel().Length() > m_rMaxMissileSpeed)
+			pMissile->SetVel(pMissile->GetVel().Normal() * m_rMaxMissileSpeed);
+		}
+	if (m_iAccelerationInc > 0)
+		{
+		pMissile->SetVel(pMissile->GetVel() + (pMissile->GetVel().Normal() * m_iAccelerationInc));
+		
+		//	Truncate to maxMissileSpeed if necessary
+		if (pMissile->GetVel().Length() > m_rMaxMissileSpeed)
+			pMissile->SetVel(pMissile->GetVel().Normal() * m_rMaxMissileSpeed);
+		}
+	else if (m_iAccelerationInc < 0)
+		{
+		//	Truncate to 0 to avoid negative velocity
+		if (pMissile->GetVel().Length() < Absolute(m_iAccelerationInc))
+			{
+			pMissile->SetVel(pMissile->GetVel() * 0);
+			}
+		else
+			{
+			pMissile->SetVel(pMissile->GetVel() + (pMissile->GetVel().Normal() * m_iAccelerationInc));
+			}
 		}
     }
 
@@ -1595,6 +1618,7 @@ void CWeaponFireDesc::InitFromDamage (const DamageDesc &Damage)
 	m_iManeuverability = 0;
 	m_iManeuverRate = -1;
 	m_iAccelerationFactor = 0;
+	m_iAccelerationInc = 0;
 	m_rMaxMissileSpeed = m_rMissileSpeed;
 
 	//	Hit points and interaction
@@ -1840,6 +1864,7 @@ ALERROR CWeaponFireDesc::InitFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDesc, c
 				m_pEffect->SetVariants(g_RotationRange);
 
 			m_iAccelerationFactor = pDesc->GetAttributeInteger(ACCELERATION_FACTOR_ATTRIB);
+			m_iAccelerationInc = pDesc->GetAttributeInteger(ACCELERATION_INC_ATTRIB);
 			int iMaxSpeed = pDesc->GetAttributeInteger(MAX_MISSILE_SPEED_ATTRIB);
 			if (iMaxSpeed == 0)
 				m_rMaxMissileSpeed = m_rMissileSpeed;
@@ -2282,6 +2307,7 @@ ALERROR CWeaponFireDesc::InitScaledStats (SDesignLoadCtx &Ctx, CXMLElement *pDes
     m_iPassthrough = Src.m_iPassthrough;
 
     m_iAccelerationFactor = Src.m_iAccelerationFactor;
+	m_iAccelerationInc = Src.m_iAccelerationInc;
     m_rMaxMissileSpeed = Src.m_rMaxMissileSpeed;
     m_iStealth = Src.m_iStealth;
     m_iHitPoints = Src.m_iHitPoints;
