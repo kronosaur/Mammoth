@@ -5,69 +5,6 @@
 
 #pragma once
 
-//	SmartPtr
-
-class ICCItemPtr
-	{
-	public:
-		constexpr ICCItemPtr (void) : m_pPtr(NULL) { }
-		constexpr ICCItemPtr (std::nullptr_t) : m_pPtr(NULL) { }
-
-		explicit ICCItemPtr (ICCItem *pPtr) : m_pPtr(pPtr) { }
-
-		ICCItemPtr (const ICCItemPtr &Src);
-
-		ICCItemPtr (ICCItemPtr &&Src) : m_pPtr(Src.m_pPtr)
-			{
-			Src.m_pPtr = NULL;
-			}
-
-		~ICCItemPtr (void);
-
-		ICCItemPtr &operator= (const ICCItemPtr &Src);
-		ICCItemPtr &operator= (ICCItem *pSrc);
-		operator ICCItem *() const { return m_pPtr; }
-		ICCItem * operator->() const { return m_pPtr; }
-
-		explicit operator bool() const { return (m_pPtr != NULL); }
-
-		void Delete (void);
-
-		bool Load (const CString &sCode, CString *retsError);
-
-		void TakeHandoff (ICCItem *pPtr);
-		void TakeHandoff (ICCItemPtr &Src);
-
-		void Set (const ICCItemPtr &Src)
-			{
-			*this = Src;
-			}
-
-	private:
-		ICCItem *m_pPtr;
-	};
-
-//	CCodeChainConvert ----------------------------------------------------------
-//
-//	Helper class to convert from ICCItem to various types.
-
-class CTLispConvert
-	{
-	public:
-		enum ETypes 
-			{
-			typeNil,
-
-			typeShipClass,
-			typeSpaceObject,
-			};
-
-		static ETypes ArgType (ICCItem *pItem, ETypes iDefaultType, ICCItem **retpValue = NULL);
-		static DWORD AsImageDesc (ICCItem *pItem, RECT *retrcRect);
-		static bool AsScreen (ICCItem *pItem, CString *retsScreen = NULL, ICCItemPtr *retpData = NULL, int *retiPriority = NULL);
-		static ICCItemPtr CreateCurrencyValue (CCodeChain &CC, CurrencyValue Value);
-	};
-
 //	CodeChain context
 
 enum ECodeChainEvents
@@ -95,10 +32,10 @@ class CCodeChainCtx
 		CCodeChainCtx (void);
 		~CCodeChainCtx (void);
 
-		void DefineContainingType (CDesignType *pType);
+		void DefineContainingType (const CDesignType *pType);
 		void DefineContainingType (const CItem &Item);
 		void DefineContainingType (const COverlay *pOverlay);
-		void DefineContainingType (CSpaceObject *pObj);
+		void DefineContainingType (const CSpaceObject *pObj);
 		inline ICCItem *CreateNil (void) { return m_CC.CreateNil(); }
 		inline void DefineBool (const CString &sVar, bool bValue) { m_CC.DefineGlobal(sVar, (bValue ? m_CC.CreateTrue() : m_CC.CreateNil())); }
 		void DefineDamageCtx (const SDamageCtx &Ctx, int iDamage = -1);
@@ -134,7 +71,7 @@ class CCodeChainCtx
 		void SaveAndDefineItemVar (const CItem &Item);
 		void SaveAndDefineItemVar (CItemCtx &ItemCtx);
 		void SaveAndDefineOverlayID (DWORD dwID);
-		void SaveAndDefineSourceVar (CSpaceObject *pSource);
+		void SaveAndDefineSourceVar (const CSpaceObject *pSource);
 		void SaveAndDefineSovereignVar (CSovereign *pSource);
 		void SaveAndDefineType (DWORD dwUNID);
 		void SaveItemVar (void);

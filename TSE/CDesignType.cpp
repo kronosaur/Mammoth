@@ -895,7 +895,7 @@ void CDesignType::FireGetGlobalAchievements (CGameStats &Stats)
 		}
 	}
 
-bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpaceObject *pObj, CString *retsScreen, ICCItemPtr *retpData, int *retiPriority)
+bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, const CSpaceObject *pObj, CDockScreenSys::SSelector &Selector) const
 
 //	FireGetGlobalDockScreen
 //
@@ -921,7 +921,7 @@ bool CDesignType::FireGetGlobalDockScreen (const SEventHandlerDesc &Event, CSpac
 		return false;
 		}
 
-	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
+	return CTLispConvert::AsScreenSelector(pResult, &Selector);
 	}
 
 bool CDesignType::FireGetGlobalPlayerPriceAdj (const SEventHandlerDesc &Event, STradeServiceCtx &ServiceCtx, ICCItem *pData, int *retiPriceAdj)
@@ -1209,6 +1209,7 @@ void CDesignType::FireOnGlobalObjDestroyed (const SEventHandlerDesc &Event, SDes
 	CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 	CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 	CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+	CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 	CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 	//	Run code
@@ -2635,7 +2636,7 @@ void CDesignType::Reinit (void)
 	DEBUG_CATCH_MSG1(CONSTLIT("Crash in CDesignType::Reinit Type = %x"), GetUNID())
 	}
 
-void CDesignType::ReportEventError (const CString &sEvent, ICCItem *pError)
+void CDesignType::ReportEventError (const CString &sEvent, ICCItem *pError) const
 
 //	ReportEventError
 //

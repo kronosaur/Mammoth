@@ -369,7 +369,7 @@ void COverlay::FireCustomEvent (CSpaceObject *pSource, const CString &sEvent, IC
 		*retpResult = g_pUniverse->GetCC().CreateNil();
 	}
 
-bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, int *retiPriority, ICCItemPtr *retpData) const
+bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CDockScreenSys::SSelector &Selector) const
 
 //	FireGetDockScreen
 //
@@ -392,7 +392,7 @@ bool COverlay::FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen, in
 		return false;
 		}
 
-	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
+	return CTLispConvert::AsScreenSelector(pResult, &Selector);
 	}
 
 void COverlay::FireOnCreate (CSpaceObject *pSource)
@@ -528,6 +528,7 @@ void COverlay::FireOnObjDestroyed (CSpaceObject *pSource, const SDestroyCtx &Ctx
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 		//	Execute

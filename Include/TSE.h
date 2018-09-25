@@ -22,6 +22,7 @@
 //	Define some debugging symbols
 
 #ifdef DEBUG
+#define DEBUG_ENEMY_CACHE_BUG
 //#define DEBUG_ALL_ITEMS
 //#define DEBUG_ALL_NODES
 //#define DEBUG_ASTAR_PATH
@@ -159,6 +160,7 @@ extern CUniverse *g_pUniverse;
 #include "TSEUtil.h"
 #include "TSETransLisp.h"
 #include "TSELanguage.h"
+#include "TSEDesignDefs.h"
 #include "TSEDesign.h"
 #include "TSEStorage.h"
 #include "TSEMultiverse.h"
@@ -475,7 +477,7 @@ class COverlay
 		void Destroy (CSpaceObject *pSource);
 		inline bool Disarms (CSpaceObject *pSource) const { return m_pType->Disarms(); }
 		void FireCustomEvent (CSpaceObject *pSource, const CString &sEvent, ICCItem *pData, ICCItem **retpResult);
-		bool FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen = NULL, int *retiPriority = NULL, ICCItemPtr *retpData = NULL) const;
+		bool FireGetDockScreen (CSpaceObject *pSource, CDockScreenSys::SSelector &Selector) const;
 		void FireOnCreate (CSpaceObject *pSource);
 		bool FireOnDamage (CSpaceObject *pSource, SDamageCtx &Ctx);
 		void FireOnDestroy (CSpaceObject *pSource);
@@ -569,7 +571,7 @@ class COverlayList
 		void AccumulateBounds (CSpaceObject *pSource, int iScale, int iRotation, RECT *ioBounds);
 		bool Damage (CSpaceObject *pSource, SDamageCtx &Ctx);
 		CString DebugCrashInfo (void) const;
-		bool FireGetDockScreen (CSpaceObject *pSource, CString *retsScreen = NULL, int *retiPriority = NULL, ICCItemPtr *retpData = NULL) const;
+		bool FireGetDockScreen (CSpaceObject *pSource, CDockScreenSys::SSelector *retSelector = NULL) const;
 		void FireOnObjDestroyed (CSpaceObject *pSource, const SDestroyCtx &Ctx) const;
 		void FireOnObjDocked (CSpaceObject *pSource, CSpaceObject *pShip) const;
 		inline const CConditionSet &GetConditions (void) const { return m_Conditions; }
@@ -860,7 +862,6 @@ class CSpaceObject : public CObject
 		bool SetItemProperty (const CItem &Item, const CString &sName, ICCItem *pValue, int iCount, CItem *retItem, CString *retsError);
 		bool Translate (const CString &sID, ICCItem *pData, CString *retsText);
 		bool Translate (const CString &sID, ICCItem *pData, ICCItem **retpResult);
-		CString Translate (const CString &sID, ICCItem *pData, const CString &sDefault);
 		void UseItem (CItem &Item, CString *retsError = NULL);
 
 		inline void InvalidateItemListAddRemove (void) { m_fItemEventsValid = false; }
@@ -924,7 +925,7 @@ class CSpaceObject : public CObject
 		void FireCustomItemEvent (const CString &sEvent, const CItem &Item, ICCItem *pData, ICCItem **retpResult = NULL);
 		void FireCustomOverlayEvent (const CString &sEvent, DWORD dwID, ICCItem *pData, ICCItem **retpResult = NULL);
 		void FireCustomShipOrderEvent (const CString &sEvent, CSpaceObject *pShip, ICCItem **retpResult = NULL);
-		bool FireGetDockScreen (CString *retsScreen = NULL, int *retiPriority = NULL, ICCItemPtr *retpData = NULL) const;
+		bool FireGetDockScreen (CDockScreenSys::SSelector *retSelector = NULL) const;
 		bool FireGetExplosionType (SExplosionType *retExplosion) const;
 		bool FireGetPlayerPriceAdj (STradeServiceCtx &ServiceCtx, ICCItem *pData, int *retiPriceAdj);
 		void FireItemOnAIUpdate (void);
@@ -1386,6 +1387,8 @@ class CSpaceObject : public CObject
 		virtual CurrencyValue GetBalancedTreasure (void) const { return 0; }
 		virtual Metric GetCargoSpaceLeft (void) { return 1000000.0; }
 		virtual int GetCombatPower (void) { return 0; }
+		virtual int GetCounterIncrementRate(void) { return NULL; }
+		virtual int GetCounterValue(void) { return NULL; }
 		virtual int GetCyberDefenseLevel (void) { return GetLevel(); }
 		virtual int GetDamageEffectiveness (CSpaceObject *pAttacker, CInstalledDevice *pWeapon) { return 0; }
 		virtual DamageTypes GetDamageType (void) { return damageGeneric; }
@@ -1397,6 +1400,7 @@ class CSpaceObject : public CObject
 		virtual int GetLastFireTime (void) const { return 0; }
 		virtual int GetLastHitTime (void) const { return 0; }
 		virtual int GetLevel (void) const { return 1; }
+		virtual int GetMaxCounterValue(void) { return 0; }
 		virtual int GetMaxPower (void) const { return 0; }
 		virtual int GetMaxLightDistance (void) { return 0; }
 		virtual Metric GetMaxWeaponRange (void) const { return 0.0; }
@@ -1411,6 +1415,7 @@ class CSpaceObject : public CObject
 		virtual int GetVisibleDamage (void) { return 0; }
 		virtual void GetVisibleDamageDesc (SVisibleDamage &Damage) { Damage = SVisibleDamage(); }
 		virtual bool HasMapLabel (void) { return false; }
+		virtual void IncCounterValue(int iCounterValue) { }
 		virtual bool IsAngry (void) { return false; }
 		virtual bool IsAngryAt (CSpaceObject *pObj) const { return IsEnemy(pObj); }
 		virtual bool IsIdentified (void) { return true; }
@@ -1434,6 +1439,7 @@ class CSpaceObject : public CObject
 		virtual void SendMessage (CSpaceObject *pSender, const CString &sMsg) { }
 		virtual int SetAISettingInteger (const CString &sSetting, int iValue) { return 0; }
 		virtual CString SetAISettingString (const CString &sSetting, const CString &sValue) { return NULL_STR; }
+		virtual void SetCounterValue(int iCounterValue) { }
 		virtual void SetIdentified (bool bIdentified = true) { }
 		virtual void SetMapLabelPos (CMapLabelArranger::EPositions iPos) { }
 		virtual void UpdateArmorItems (void) { }
@@ -2014,6 +2020,7 @@ class CListWrapper : public IListData
 #include "TSEArtifactAwakening.h"
 #include "TSEEventsImpl.h"
 #include "TSEMapPainters.h"
+#include "TSETransLispUtil.h"
 
 #include "TSEUniverse.h"
 
@@ -2095,7 +2102,7 @@ CStation *CreateStationObjFromItem (CCodeChain &CC, ICCItem *pArg);
 CVector CreateVectorFromList (CCodeChain &CC, ICCItem *pList);
 CCXMLWrapper *CreateXMLElementFromItem (CCodeChain &CC, ICCItem *pItem);
 void DefineGlobalItem (CCodeChain &CC, const CString &sVar, const CItem &Item);
-void DefineGlobalSpaceObject (CCodeChain &CC, const CString &sVar, CSpaceObject *pObj);
+void DefineGlobalSpaceObject (CCodeChain &CC, const CString &sVar, const CSpaceObject *pObj);
 void DefineGlobalVector (CCodeChain &CC, const CString &sVar, const CVector &vVector);
 void DefineGlobalWeaponType (CCodeChain &CC, const CString &sVar, CItemType *pWeaponType);
 CInstalledArmor *GetArmorSectionArg (CCodeChain &CC, ICCItem *pArg, CSpaceObject *pObj);
@@ -2123,7 +2130,7 @@ inline void CInstalledDevice::SetTarget (CSpaceObject *pObj) { m_dwTargetID = (p
 
 inline bool CItem::IsDisrupted (void) const { return (m_pExtra ? (m_pExtra->m_dwDisruptedTime >= (DWORD)g_pUniverse->GetTicks()) : false); }
 
-inline void CSpaceObjectGrid::AddObject (CSpaceObject *pObj) { GetList(pObj->GetPos()).FastAdd(pObj); }
+inline void CSpaceObjectGrid::AddObject (CSpaceObject *pObj) { ASSERT(pObj->GetID() != 0xdddddddd); GetList(pObj->GetPos()).FastAdd(pObj); }
 
 inline int CalcHPDamageAdj (int iHP, int iDamageAdj)
 	{ return (iDamageAdj == 0 ? -1 : (int)((iHP * 100.0 / iDamageAdj) + 0.5)); }

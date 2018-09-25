@@ -650,66 +650,62 @@ void CDesignCollection::FireGetGlobalAchievements (CGameStats &Stats)
 		}
 	}
 
-bool CDesignCollection::FireGetGlobalDockScreen (CSpaceObject *pObj, CString *retsScreen, ICCItemPtr *retpData, int *retiPriority)
+bool CDesignCollection::FireGetGlobalDockScreen (const CSpaceObject *pObj, DWORD dwFlags, CDockScreenSys::SSelector *retSelector) const
 
 //	FireGetGlobalDockScreen
 //
 //	Allows types to override the dock screen for an object.
-//	NOTE: If we return TRUE, callers must discard *retpData.
 
 	{
-	int i;
-	CCodeChain &CC = g_pUniverse->GetCC();
+	//	If we don't want override screens then we only return screens that DO NOT
+	//	have the override only flag (even if they might be higher priority).
+	//	We use this to tell if a station has any screens at all (excluding 
+	//	override-only screens).
 
-	int iBestPriority = -1;
-	CString sBestScreen;
-	ICCItemPtr pBestData;
+	bool bNoOverride = ((dwFlags & FLAG_NO_OVERRIDE) ? true : false);
 
 	//	Loop over all types and get the highest priority screen
 
-	for (i = 0; i < m_EventsCache[evtGetGlobalDockScreen]->GetCount(); i++)
+	CDockScreenSys::SSelector BestScreen;
+	BestScreen.iPriority = -1;
+
+	for (int i = 0; i < m_EventsCache[evtGetGlobalDockScreen]->GetCount(); i++)
 		{
 		SEventHandlerDesc Event;
 		CDesignType *pType = m_EventsCache[evtGetGlobalDockScreen]->GetEntry(i, &Event);
 
-		int iPriority;
-		CString sScreen;
-		ICCItemPtr pData;
-		if (pType->FireGetGlobalDockScreen(Event, pObj, &sScreen, &pData, &iPriority))
+		CDockScreenSys::SSelector EventScreen;
+		if (pType->FireGetGlobalDockScreen(Event, pObj, EventScreen))
 			{
+			//	If this is an override only screen and we don't want override
+			//	screens, then skip.
+
+			if (bNoOverride && EventScreen.bOverrideOnly)
+				continue;
+
 			//	If we don't care about a specific screen then only want to know
 			//	whether there is at least one global dock screen, so we take a
 			//	short cut.
 
-			if (retsScreen == NULL)
+			else if (retSelector == NULL)
 				return true;
 
 			//	Otherwise, see if this is better.
 
-			if (iPriority > iBestPriority)
-				{
-				iBestPriority = iPriority;
-				sBestScreen = sScreen;
-				pBestData = pData;
-				}
+			else if (EventScreen.iPriority > BestScreen.iPriority)
+				BestScreen = EventScreen;
 			}
 		}
 
 	//	If none found, then we're done
 
-	if (iBestPriority == -1)
+	if (BestScreen.iPriority == -1)
 		return false;
 
 	//	Otherwise, return screen
 
-	if (retsScreen)
-		*retsScreen = sBestScreen;
-
-	if (retiPriority)
-		*retiPriority = iBestPriority;
-
-	if (retpData)
-		*retpData = pBestData;
+	if (retSelector)
+		*retSelector = BestScreen;
 
 	return true;
 	}

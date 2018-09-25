@@ -320,6 +320,18 @@ CSpaceObject::~CSpaceObject (void)
 		delete pDelete;
 		}
 
+#ifdef DEBUG_ENEMY_CACHE_BUG
+	if (g_pUniverse)
+		{
+		for (int i = 0; i < g_pUniverse->GetSovereignCount(); i++)
+			g_pUniverse->GetSovereign(i)->DebugObjDeleted(this);
+
+		CSystem *pSystem = g_pUniverse->GetCurrentSystem();
+		if (pSystem)
+			pSystem->GetObjectGrid().DebugObjDeleted(this);
+		}
+#endif
+
 #ifdef DEBUG_OBJ_REFERENCES
 	//	Make sure the object is not being held by anyone else
 
@@ -2099,7 +2111,7 @@ void CSpaceObject::FireCustomShipOrderEvent (const CString &sEvent, CSpaceObject
 		}
 	}
 
-bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, ICCItemPtr *retpData) const
+bool CSpaceObject::FireGetDockScreen (CDockScreenSys::SSelector *retSelector) const
 
 //	FireGetDockScreen
 //
@@ -2112,7 +2124,7 @@ bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, IC
 		return false;
 
 	CCodeChainCtx Ctx;
-	Ctx.DefineContainingType(const_cast<CSpaceObject *>(this));
+	Ctx.DefineContainingType(this);
 	Ctx.SaveAndDefineSourceVar(const_cast<CSpaceObject *>(this));
 
 	ICCItemPtr pResult = Ctx.RunCode(Event);
@@ -2122,7 +2134,7 @@ bool CSpaceObject::FireGetDockScreen (CString *retsScreen, int *retiPriority, IC
 		return false;
 		}
 
-	return CTLispConvert::AsScreen(pResult, retsScreen, retpData, retiPriority);
+	return CTLispConvert::AsScreenSelector(pResult, retSelector);
 	}
 
 bool CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion) const
@@ -2137,7 +2149,7 @@ bool CSpaceObject::FireGetExplosionType (SExplosionType *retExplosion) const
 	if (FindEventHandler(GET_EXPLOSION_TYPE_EVENT, &Event))
 		{
 		CCodeChainCtx Ctx;
-		Ctx.DefineContainingType(const_cast<CSpaceObject *>(this));
+		Ctx.DefineContainingType(this);
 		Ctx.SaveAndDefineSourceVar(const_cast<CSpaceObject *>(this));
 
 		ICCItem *pResult = Ctx.Run(Event);
@@ -2528,6 +2540,7 @@ void CSpaceObject::FireOnDestroy (const SDestroyCtx &Ctx)
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 		//	Run code
@@ -2559,6 +2572,7 @@ void CSpaceObject::FireOnDestroyObj (const SDestroyCtx &Ctx)
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 		ICCItem *pResult = CCCtx.Run(Event);
@@ -2631,6 +2645,7 @@ void CSpaceObject::FireOnDockObjDestroyed (CSpaceObject *pDockTarget, const SDes
 	CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 	CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 	CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+	CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 	CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 	ICCItemPtr pResult = CCCtx.RunCode(Event);
@@ -2830,6 +2845,7 @@ void CSpaceObject::FireOnObjDestroyed (const SDestroyCtx &Ctx)
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 		ICCItem *pResult = CCCtx.Run(Event);
@@ -3367,6 +3383,7 @@ void CSpaceObject::FireOnSystemObjDestroyed (SDestroyCtx &Ctx)
 		CCCtx.DefineSpaceObject(CONSTLIT("aDestroyer"), Ctx.Attacker.GetObj());
 		CCCtx.DefineSpaceObject(CONSTLIT("aOrderGiver"), Ctx.GetOrderGiver());
 		CCCtx.DefineSpaceObject(CONSTLIT("aWreckObj"), Ctx.pWreck);
+		CCCtx.DefineBool(CONSTLIT("aDestroy"), Ctx.WasDestroyed());
 		CCCtx.DefineString(CONSTLIT("aDestroyReason"), GetDestructionName(Ctx.iCause));
 
 		ICCItem *pResult = CCCtx.Run(Event);
@@ -3631,62 +3648,44 @@ CDesignType *CSpaceObject::GetFirstDockScreen (CString *retsScreen, ICCItemPtr *
 
 	//	First see if any global types override this
 
-	CString sScreen;
-	int iPriority;
-	ICCItemPtr pData;
-	if (!g_pUniverse->GetDesignCollection().FireGetGlobalDockScreen(this, &sScreen, &pData, &iPriority))
-		iPriority = -1;
+	CDockScreenSys::SSelector Screen;
+	if (!g_pUniverse->GetDesignCollection().FireGetGlobalDockScreen(this, 0, &Screen))
+		Screen.iPriority = -1;
 
 	//	See if any overlays have dock screens
 
 	COverlayList *pOverlays;
 	if (pOverlays = GetOverlays())
 		{
-		CString sOverlayScreen;
-		int iOverlayPriority;
-		ICCItemPtr pOverlayData;
-		if (pOverlays->FireGetDockScreen(this, &sOverlayScreen, &iOverlayPriority, &pOverlayData))
-			{
-			if (iOverlayPriority > iPriority)
-				{
-				sScreen = sOverlayScreen;
-				iPriority = iOverlayPriority;
-				pData = pOverlayData;
-				}
-			}
+		CDockScreenSys::SSelector OverlayScreen;
+		if (pOverlays->FireGetDockScreen(this, &OverlayScreen)
+				&& OverlayScreen.iPriority > Screen.iPriority)
+			Screen = OverlayScreen;
 		}
 
 	//	Next see if we have an event that handles this
 
-	CString sCustomScreen;
-	int iCustomPriority;
-	ICCItemPtr pCustomData;
-	if (FireGetDockScreen(&sCustomScreen, &iCustomPriority, &pCustomData))
-		{
-		if (iCustomPriority > iPriority)
-			{
-			sScreen = sCustomScreen;
-			iPriority = iCustomPriority;
-			pData = pCustomData;
-			}
-		}
+	CDockScreenSys::SSelector CustomScreen;
+	if (FireGetDockScreen(&CustomScreen)
+			&& CustomScreen.iPriority > Screen.iPriority)
+		Screen = CustomScreen;
 
 	//	If an event has overridden the dock screen, then resolve
 	//	the screen now.
 
-	if (iPriority != -1)
+	if (Screen.iPriority != -1)
 		{
-		CDesignType *pScreen = CDockScreenType::ResolveScreen(GetType(), sScreen, retsScreen);
+		CDesignType *pScreen = CDockScreenType::ResolveScreen(GetType(), Screen.sScreen, retsScreen);
 		if (pScreen)
 			{
 			if (retpData)
-				*retpData = pData;
+				*retpData = Screen.pData;
 
 			return pScreen;
 			}
 		else
 			{
-			::kernelDebugLogPattern("Unable to resolve screen: %s", sScreen);
+			::kernelDebugLogPattern("Unable to resolve screen: %s", Screen.sScreen);
 			}
 		}
 
@@ -4885,15 +4884,16 @@ bool CSpaceObject::HasDockScreen (void) const
 			&& pOverlays->FireGetDockScreen(const_cast<CSpaceObject *>(this)))
 		return true;
 
-	//	NOTE: We do not consider <GetGlobalDockScreen> for purposes of whether 
-	//	we have a dock screen or not. This is for two reasons:
+	//	If we still have no screens, we call <GetGlobalDockScreen>, but we're
+	//	only interested in non-override screens. Override screens are screens
+	//	like decontamination screens, which should only show up if the station
+	//	or ship has other screens.
 	//
-	//	1.	<GetGlobalDockScreen> is generally used to override a dock screen
-	//		(not to add one to an object that doesn't have one).
-	//
-	//	2.	If we were to consider it, then all (e.g.,) Commonwealth ships 
-	//		would have docking ports because we create docking ports on ships
-	//		if we have a screen.
+	//	If we don't do this, then some ships would automatically get screens
+	//	because we auto-create docking ports for ships if they have screens.
+
+	if (g_pUniverse->GetDesignCollection().FireGetGlobalDockScreen(this, CDesignCollection::FLAG_NO_OVERRIDE))
+		return true;
 
 	return false;
 	}
@@ -6253,8 +6253,14 @@ bool CSpaceObject::ObjRequestDock (CSpaceObject *pObj, int iPort)
 			return false;
 
 		case dockingDenied:
-			pObj->SendMessage(this, pObj->Translate(LANGID_DOCKING_REQUEST_DENIED, NULL, CONSTLIT("Docking request denied")));
+			{
+			CString sText;
+			if (!pObj->Translate(LANGID_DOCKING_REQUEST_DENIED, NULL, &sText))
+				sText = CONSTLIT("Docking request denied");
+
+			pObj->SendMessage(this, sText);
 			return false;
+			}
 			
 		default:
 			//	Should never happen. This means that we missed a result type.
@@ -7248,7 +7254,13 @@ void CSpaceObject::SetOverride (CDesignType *pOverride)
 	//	Short-circuit if no change
 
 	if (pOverride == m_pOverride)
+		{
+		//	Always set the event flags because we call this when we create the
+		//	universe and we want to make sure we set the flags in that case.
+
+		SetEventFlags();
 		return;
+		}
 
 	//	Let the previous event handler terminate
 
@@ -7402,20 +7414,6 @@ bool CSpaceObject::Translate (const CString &sID, ICCItem *pData, CString *retsT
 	//	Otherwise, we can't find it.
 
 	return false;
-	}
-
-CString CSpaceObject::Translate (const CString &sID, ICCItem *pData, const CString &sDefault)
-
-//	Translate
-//
-//	Translate a message by ID
-
-	{
-	CString sMsg;
-	if (!Translate(sID, pData, &sMsg))
-		return sDefault;
-
-	return sMsg;
 	}
 
 void CSpaceObject::Update (SUpdateCtx &Ctx)

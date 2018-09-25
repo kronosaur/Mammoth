@@ -421,6 +421,7 @@ ICCItem *fnItemCreateRandom (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwDat
 #define FN_MISSION_ADD_TIMER			10
 #define FN_MISSION_ADD_RECURRING_TIMER	11
 #define FN_MISSION_CANCEL_TIMER			12
+#define FN_MISSION_CAN_CREATE			13
 
 ICCItem *fnMission (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData);
 ICCItem *fnMissionGet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData);
@@ -639,6 +640,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			
 			"   'debugMode\n"
 			"   'showBounds\n"
+			"   'showFacingsAngle\n"
 			"   'showLineOfFire\n"
 			"   'showNavPaths\n",
 
@@ -662,6 +664,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"property:\n\n"
 			
 			"   'showBounds True/Nil\n"
+			"   'showFacingsAngle True/Nil\n"
 			"   'showLineOfFire True/Nil\n"
 			"   'showNavPaths True/Nil\n",
 
@@ -848,6 +851,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'multiShot\n"
 			"   'omnidirectional\n"
 			"   'repeating\n"
+			"	'shipCounterPerShot\n"
 			"   'stdCost\n"
 			"\n"
 			"property (armor)\n\n"
@@ -1874,6 +1878,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'availableWeaponSlots\n"
 			"   'blindingImmune\n"
 			"   'cargoSpace -> in tons\n"
+			"   'counterIncrementRate\n"
+			"   'counterValue\n"
 			"   'character\n"
 			"   'characterClass   (player ship only)\n"
 			"   'deviceDamageImmune\n"
@@ -1895,6 +1901,7 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"   'hp\n"
 			"   'hullPrice -> in object's default currency\n"
 			"   'interiorHP\n"
+			"   'maxCounter\n"
 			"   'maxHp\n"
 			"   'maxInteriorHP\n"
 			"   'maxFuel -> in He3 fuel rods\n"
@@ -2240,6 +2247,8 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 			"property (ships)\n\n"
 
 			"   'alwaysLeaveWreck True|Nil\n"
+			"   'counterValue value\n"
+			"   'counterValueIncrement value\n"
 			"   'dockingEnabled True|Nil\n"
 			"   'commsKey key\n"
 			"   'known True|Nil\n"
@@ -2387,6 +2396,10 @@ static PRIMITIVEPROCDEF g_Extensions[] =
 		{	"msnCancelTimerEvent",				fnMissionSet,	FN_MISSION_CANCEL_TIMER,
 			"(msnCancelTimerEvent missionObj event) -> True/Nil",
 			"is",	0,	},
+
+		{	"msnCanCreate",					fnMission,			FN_MISSION_CAN_CREATE,
+			"(msnCanCreate unid [owner [data]]) -> True|Nil",
+			"v*",	0,	},
 
 		{	"msnCreate",					fnMission,			FN_MISSION_CREATE,
 			"(msnCreate unid owner [data]) -> missionObj|Nil\n"
@@ -3926,6 +3939,7 @@ ALERROR CUniverse::InitCodeChainPrimitives (void)
 	m_CC.DefineGlobal(CONSTLIT("gPlayerShip"), m_CC.CreateNil());
 	m_CC.DefineGlobal(CONSTLIT("gSource"), m_CC.CreateNil());
 	m_CC.DefineGlobal(CONSTLIT("gItem"), m_CC.CreateNil());
+	m_CC.DefineGlobal(CONSTLIT("gType"), m_CC.CreateNil());
 
 	//	Register primitives
 
@@ -7910,6 +7924,8 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 			if (pDevice == NULL)
 				return pCC->CreateError(CONSTLIT("Item is not an installed device on object"), pArgs->GetElement(1));
 
+			CItemCtx WeaponCtx(pObj, pDevice);
+
 			CSpaceObject *pTarget = CreateObjFromItem(*pCC, pArgs->GetElement(2));
 
 			if (pTarget) pTarget->SetDestructionNotify();
@@ -7959,7 +7975,7 @@ ICCItem *fnObjSet (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 				if (pArgs->GetCount() >= 4 && !(pArgs->GetElement(3)->IsNil()))
 					iFireDelay = pArgs->GetElement(3)->GetIntegerValue();
 				else
-					iFireDelay = pDevice->GetClass()->GetActivateDelay(pDevice, pObj);
+					iFireDelay = pDevice->GetClass()->GetActivateDelay(WeaponCtx);
 
 				pDevice->SetTimeUntilReady(iFireDelay);
 				DEBUG_CATCH
@@ -8876,6 +8892,22 @@ ICCItem *fnMission (CEvalContext *pEvalCtx, ICCItem *pArgs, DWORD dwData)
 
 	switch (dwData)
 		{
+		case FN_MISSION_CAN_CREATE:
+			{
+			CMissionType *pType = g_pUniverse->FindMissionType(pArgs->GetElement(0)->GetIntegerValue());
+			if (pType == NULL)
+				return pCC->CreateError(CONSTLIT("Unknown mission type"), pArgs->GetElement(0));
+
+			//	Get arguments
+
+			CSpaceObject *pOwner = CreateObjFromItem(*pCC, pArgs->GetElement(1));
+			ICCItem *pData = pArgs->GetElement(2);
+
+			//	See if we can create the mission
+
+			return pCC->CreateBool(pType->CanBeCreated(pOwner, pData));
+			}
+
 		case FN_MISSION_CREATE:
 			{
 			//	Get the list of mission types, categorized by priority
