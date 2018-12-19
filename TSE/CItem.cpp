@@ -1336,6 +1336,9 @@ ICCItem *CItem::GetItemProperty (CCodeChainCtx &CCCtx, CItemCtx &Ctx, const CStr
 	else if (strEquals(sProperty, PROPERTY_USED))
 		return CC.CreateBool(IsUsed());
 
+	else if (strEquals(sProperty, PROPERTY_VARIANT))
+		return CC.CreateInteger(GetVariantNumber());
+
 	//	Next we handle all properties for devices, armor, etc. Note that this
 	//	includes both installed properties (e.g., armor segment) and static
 	//	properties (e.g., armor HP). But it DOES NOT include item type 
