@@ -101,6 +101,7 @@
 #define PROPERTY_STD_COST						CONSTLIT("stdCost")
 #define PROPERTY_TRACKING						CONSTLIT("tracking")
 
+#define VARIANT_TYPE_COUNTER					CONSTLIT("counter")
 #define VARIANT_TYPE_CHARGES					CONSTLIT("charges")
 #define VARIANT_TYPE_LEVELS						CONSTLIT("levels")
 #define VARIANT_TYPE_MISSILES					CONSTLIT("missiles")
@@ -3248,7 +3249,7 @@ int CWeaponClass::GetValidVariantCount (CSpaceObject *pSource, CInstalledDevice 
 	{
 	//	Special handling for scalable weapons
 
-	if (m_iVariantType == varLevelScaling || m_iVariantType == varCharges)
+	if (m_iVariantType == varLevelScaling || m_iVariantType == varCharges || m_iVariantType == varCounter)
 		{
 		CWeaponFireDesc *pShot = GetWeaponFireDesc(CItemCtx(pSource, pDevice));
 		if (pShot && VariantIsValid(pSource, pDevice, *pShot))
@@ -3422,6 +3423,16 @@ CWeaponFireDesc *CWeaponClass::GetWeaponFireDesc (CItemCtx &ItemCtx, const CItem
 		return m_ShotData[iIndex].pDesc;
 		}
 
+	//	Handle counter variants
+
+	else if (m_iVariantType == varCounter)
+	{
+		//	We assume that all charge values are represented in m_ShotData.
+
+		int iIndex = Min(Max(0, ItemCtx.GetItemVariantNumber()), m_ShotData.GetCount() - 1);
+		return m_ShotData[iIndex].pDesc;
+	}
+
     //  If we need ammo, then we have extra work to do.
     //  NOTE: Currently, if one variant uses ammo, all need to use ammo.
 	//	NOTE 2: This only applies to launchers. By definition, non-launchers
@@ -3532,6 +3543,8 @@ ALERROR CWeaponClass::InitVariantsFromXML (SDesignLoadCtx &Ctx, CXMLElement *pDe
 			m_iVariantType = varLauncher;
 		else if (strEquals(sType, VARIANT_TYPE_LEVELS))
 			m_iVariantType = varLevelScaling;
+		else if (strEquals(sType, VARIANT_TYPE_COUNTER))
+			m_iVariantType = varCounter;
 		else
 			{
 			Ctx.sError = strPatternSubst(CONSTLIT("Unknown variant type: %s"), sType);
@@ -4291,7 +4304,7 @@ bool CWeaponClass::SelectNextVariant (CSpaceObject *pSource, CInstalledDevice *p
 	//	For scaling, the descriptor to use is based on something other than the
 	//	selection, so we only one selection.
 
-	if (m_iVariantType == varLevelScaling || m_iVariantType == varCharges)
+	if (m_iVariantType == varLevelScaling || m_iVariantType == varCharges || m_iVariantType == varCounter)
 		{
 		CWeaponFireDesc *pShot = GetWeaponFireDesc(CItemCtx(pSource, pDevice));
 		if (pShot && VariantIsValid(pSource, pDevice, *pShot))
