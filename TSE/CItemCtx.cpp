@@ -306,13 +306,13 @@ int CItemCtx::GetItemVariantNumber(void)
 //
 //	Returns the variant number for the item (or 0).
 
-{
+	{
 	const CItem &Item = GetItem();
 	if (Item.IsEmpty())
 		return 0;
 
 	return Item.GetVariantNumber();
-}
+	}
 
 const CItemEnhancement &CItemCtx::GetMods(void)
 

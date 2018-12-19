@@ -3116,15 +3116,15 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
         return true;
         }
 	else if (strEquals(sName, PROPERTY_VARIANT))
-	{
-		if (pValue == NULL || pValue->IsNil())
 		{
+		if (pValue == NULL || pValue->IsNil())
+			{
 			if (retsError) *retsError = NULL_STR;
 			return false;
-		}
+			}
 
 		SetVariantNumber(pValue->GetIntegerValue());
-	}
+		}
 
 	//	If this is an installed device, then pass it on
 
@@ -3144,13 +3144,13 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
 
 void CItem::SetVariantNumber(int iVariantCounter)
 
-		//	SetVariantNumber
-		//
-		//	Sets the current variant counter
+//	SetVariantNumber
+//
+//	Sets the current variant counter
 
 	{
-		Extra();
-		m_pExtra->m_dwVariantCounter = iVariantCounter;
+	Extra();
+	m_pExtra->m_dwVariantCounter = iVariantCounter;
 	}
 
 
@@ -3256,7 +3256,7 @@ void CItem::WriteToStream (IWriteStream *pStream)
 //	DWORD		m_dwDisruptedTime
 //	CItemEnhancement
 //	CAttributeDataBlock
-//  DWORD		m_dwVariantCounter
+//	DWORD		m_dwVariantCounter
 
 	{
 	DWORD dwSave = m_pItemType->GetUNID();

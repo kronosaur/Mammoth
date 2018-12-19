@@ -3426,12 +3426,12 @@ CWeaponFireDesc *CWeaponClass::GetWeaponFireDesc (CItemCtx &ItemCtx, const CItem
 	//	Handle counter variants
 
 	else if (m_iVariantType == varCounter)
-	{
+		{
 		//	We assume that all charge values are represented in m_ShotData.
 
 		int iIndex = Min(Max(0, ItemCtx.GetItemVariantNumber()), m_ShotData.GetCount() - 1);
 		return m_ShotData[iIndex].pDesc;
-	}
+		}
 
     //  If we need ammo, then we have extra work to do.
     //  NOTE: Currently, if one variant uses ammo, all need to use ammo.
