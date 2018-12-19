@@ -2910,8 +2910,7 @@ void CItem::ReadFromStream (SLoadCtx &Ctx)
 			m_pExtra->m_Data.ReadFromStream(Ctx);
 			if (Ctx.dwVersion >= 169)
 				{
-				Ctx.pStream->Read((char *)&m_pExtra->m_dwDisruptedTime, sizeof(DWORD));
-				m_pExtra->m_dwVariantCounter = LOWORD(dwLoad);
+				Ctx.pStream->Read((char *)&m_pExtra->m_dwVariantCounter, sizeof(DWORD));
 				}
 			else
 				m_pExtra->m_dwVariantCounter = 0;
