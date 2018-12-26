@@ -726,6 +726,11 @@ int CAIBehaviorCtx::CalcWeaponScore (CShip *pShip, CSpaceObject *pTarget, CInsta
 	{
 	int iScore = 0;
 
+	//	If we refuse to fire damaged weapons, then check if this weapon is damaged or disrupted
+	if (m_AISettings.NoFireDamagedWeapons()
+			&& (pWeapon->IsDamaged() || pWeapon->IsDisrupted()))
+		return 0;
+
 	//	If this is an EMP weapon adjust the score based on the state of
 	//	the target.
 
@@ -786,7 +791,7 @@ int CAIBehaviorCtx::CalcWeaponScore (CShip *pShip, CSpaceObject *pTarget, CInsta
 		else
 			iScore += 20;
 		}
-
+	
 	//	Adjust score based on effectiveness
 
 	iScore += iEffectiveness;
