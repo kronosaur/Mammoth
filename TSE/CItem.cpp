@@ -38,6 +38,7 @@
 #define PROPERTY_ROOT_NAME						CONSTLIT("rootName")
 #define PROPERTY_TRADE_ID						CONSTLIT("tradeID")
 #define PROPERTY_VALUE_BONUS_PER_CHARGE			CONSTLIT("valueBonusPerCharge")
+#define PROPERTY_VARIANT						CONSTLIT("variant")
 #define PROPERTY_USED							CONSTLIT("used")
 #define PROPERTY_WEAPON_TYPES					CONSTLIT("weaponTypes")
 
@@ -456,6 +457,7 @@ void CItem::Extra (void)
 		m_pExtra->m_dwCharges = 0;
 		m_pExtra->m_dwVariant = 0;
 		m_pExtra->m_dwDisruptedTime = 0;
+		m_pExtra->m_dwVariantCounter = 0;
 		}
 	}
 
@@ -1334,6 +1336,9 @@ ICCItem *CItem::GetItemProperty (CCodeChainCtx &CCCtx, CItemCtx &Ctx, const CStr
 	else if (strEquals(sProperty, PROPERTY_USED))
 		return CC.CreateBool(IsUsed());
 
+	else if (strEquals(sProperty, PROPERTY_VARIANT))
+		return CC.CreateInteger(GetVariantNumber());
+
 	//	Next we handle all properties for devices, armor, etc. Note that this
 	//	includes both installed properties (e.g., armor segment) and static
 	//	properties (e.g., armor HP). But it DOES NOT include item type 
@@ -1772,6 +1777,7 @@ bool CItem::IsExtraEmpty (const SExtra *pExtra, DWORD dwFlags)
 
 	return ((bIgnoreCharges || pExtra->m_dwCharges == 0)
 			&& pExtra->m_dwVariant == 0
+			&& pExtra->m_dwVariantCounter == 0
 			&& (bIgnoreDisrupted || (pExtra->m_dwDisruptedTime == 0 || pExtra->m_dwDisruptedTime < (DWORD)g_pUniverse->GetTicks()))
 			&& (bIgnoreEnhancements || pExtra->m_Mods.IsEmpty())
 			&& (bIgnoreData || pExtra->m_Data.IsEmpty()));
@@ -1795,6 +1801,7 @@ bool CItem::IsExtraEqual (SExtra *pSrc, DWORD dwFlags) const
 
 		return ((bIgnoreCharges || m_pExtra->m_dwCharges == pSrc->m_dwCharges)
 				&& m_pExtra->m_dwVariant == pSrc->m_dwVariant
+				&& m_pExtra->m_dwVariantCounter == pSrc->m_dwVariantCounter
 				&& (bIgnoreDisrupted || IsDisruptionEqual(m_pExtra->m_dwDisruptedTime, pSrc->m_dwDisruptedTime))
 				&& (bIgnoreEnhancements || m_pExtra->m_Mods.IsEqual(pSrc->m_Mods))
 				&& (bIgnoreData || m_pExtra->m_Data.IsEqual(pSrc->m_Data)));
@@ -2811,7 +2818,7 @@ void CItem::ReadFromCCItem (CCodeChain &CC, ICCItem *pBuffer)
 
 			//	Load the version, if we have it
 
-			DWORD dwVersion = 45;
+			DWORD dwVersion = 46;
 			if (pBuffer->GetCount() >= 7)
 				{
 				dwVersion = (DWORD)pBuffer->GetElement(iStart)->GetIntegerValue();
@@ -2848,6 +2855,11 @@ void CItem::ReadFromCCItem (CCodeChain &CC, ICCItem *pBuffer)
 
 			if (pBuffer->GetCount() >= 8)
 				m_pExtra->m_dwDisruptedTime = (DWORD)pBuffer->GetElement(iStart+4)->GetIntegerValue();
+
+			//	Variant number
+
+			if (pBuffer->GetCount() >= 9)
+				m_pExtra->m_dwVariantCounter = (DWORD)pBuffer->GetElement(iStart+5)->GetIntegerValue();
 			}
 		}
 	}
@@ -2896,6 +2908,13 @@ void CItem::ReadFromStream (SLoadCtx &Ctx)
 
 			m_pExtra->m_Mods.ReadFromStream(Ctx);
 			m_pExtra->m_Data.ReadFromStream(Ctx);
+			if (Ctx.dwVersion >= 169)
+				{
+				Ctx.pStream->Read((char *)&m_pExtra->m_dwVariantCounter, sizeof(DWORD));
+				}
+			else
+				m_pExtra->m_dwVariantCounter = 0;
+
 			}
 		else
 			m_pExtra = NULL;
@@ -2913,6 +2932,7 @@ void CItem::ReadFromStream (SLoadCtx &Ctx)
 			m_pExtra->m_dwCharges = dwCharges;
 			m_pExtra->m_dwVariant = 0;
 			m_pExtra->m_dwDisruptedTime = 0;
+			m_pExtra->m_dwVariantCounter = 0;
 			}
 		else
 			m_pExtra = NULL;
@@ -3094,6 +3114,16 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
 
         return true;
         }
+	else if (strEquals(sName, PROPERTY_VARIANT))
+		{
+		if (pValue == NULL || pValue->IsNil())
+			{
+			if (retsError) *retsError = NULL_STR;
+			return false;
+			}
+
+		SetVariantNumber(pValue->GetIntegerValue());
+		}
 
 	//	If this is an installed device, then pass it on
 
@@ -3110,6 +3140,18 @@ bool CItem::SetProperty (CItemCtx &Ctx, const CString &sName, ICCItem *pValue, C
 
 	return true;
 	}
+
+void CItem::SetVariantNumber(int iVariantCounter)
+
+//	SetVariantNumber
+//
+//	Sets the current variant counter
+
+	{
+	Extra();
+	m_pExtra->m_dwVariantCounter = iVariantCounter;
+	}
+
 
 ICCItem *CItem::WriteToCCItem (CCodeChain &CC) const
 
@@ -3186,6 +3228,12 @@ ICCItem *CItem::WriteToCCItem (CCodeChain &CC) const
 		pInt = CC.CreateInteger(m_pExtra->m_dwDisruptedTime);
 		pList->Append(CC, pInt);
 		pInt->Discard(&CC);
+
+		//  Variant number
+
+		pInt = CC.CreateInteger(m_pExtra->m_dwVariantCounter);
+		pList->Append(CC, pInt);
+		pInt->Discard(&CC);
 		}
 
 	return pResult;
@@ -3207,6 +3255,7 @@ void CItem::WriteToStream (IWriteStream *pStream) const
 //	DWORD		m_dwDisruptedTime
 //	CItemEnhancement
 //	CAttributeDataBlock
+//	DWORD		m_dwVariantCounter
 
 	{
 	DWORD dwSave = m_pItemType->GetUNID();
@@ -3230,6 +3279,8 @@ void CItem::WriteToStream (IWriteStream *pStream) const
 		//	Note: Currently does not support saving object references
 
 		m_pExtra->m_Data.WriteToStream(pStream);
+		pStream->Write((char *)&m_pExtra->m_dwVariantCounter, sizeof(DWORD));
+
 		}
 	}
 
