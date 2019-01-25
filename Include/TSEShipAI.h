@@ -82,6 +82,7 @@ class CAISettings
 		inline bool IsNonCombatant (void) const { return m_fNonCombatant; }
 		inline bool NoAttackOnThreat (void) const { return m_fNoAttackOnThreat; }
 		inline bool NoDogfights (void) const { return m_fNoDogfights; }
+		inline bool NoFireDamagedWeapons (void) const { return m_fNoFireDamagedWeapons; }
 		inline bool NoFriendlyFire (void) const { return m_fNoFriendlyFire; }
 		inline bool NoFriendlyFireCheck (void) const { return m_fNoFriendlyFireCheck; }
 		inline bool NoNavPaths (void) const { return m_fNoNavPaths; }
@@ -121,7 +122,7 @@ class CAISettings
 		DWORD m_fNoNavPaths:1;					//	If TRUE, do not use nav paths
 		DWORD m_fNoAttackOnThreat:1;			//	Do not attack enemies while escorting (unless ordered)
 		DWORD m_fNoTargetsOfOpportunity:1;		//	If TRUE, do not attack targets of opportunity
-		DWORD m_fSpare4:1;
+		DWORD m_fNoFireDamagedWeapons:1;		//	If TRUE, do not fire disrupted or damaged weapons
 		DWORD m_fSpare5:1;
 		DWORD m_fSpare6:1;
 		DWORD m_fSpare7:1;
