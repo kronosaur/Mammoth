@@ -5301,6 +5301,11 @@ void CShip::OnPaintMap (CMapViewportCtx &Ctx, CG32bitImage &Dest, int x, int y)
 				RGB_MAP_LABEL,
 				m_sMapLabel);
 		}
+	//	Paint the object if it shows up in the LRS
+	else if (GetPOVLRS())
+		//	We don't paint the background because we don't have a map label
+		//	We don't use a ViewportTransform
+		PaintLRSForeground(Dest, x, y, ViewportTransform());
 	}
 
 void CShip::OnPlace (const CVector &vOldPos)

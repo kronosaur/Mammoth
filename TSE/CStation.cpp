@@ -3174,6 +3174,9 @@ void CStation::OnPaintMap (CMapViewportCtx &Ctx, CG32bitImage &Dest, int x, int 
 					m_sMapLabel);
 			}
 		}
+	//	Paint objects from the LRS if they do not already show up in the map
+	else if (GetPOVLRS())
+		PaintLRSForeground(Dest, x, y, ViewportTransform());
 	}
 
 void CStation::OnPlayerObj (CSpaceObject *pPlayer)

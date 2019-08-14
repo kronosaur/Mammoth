@@ -1018,6 +1018,7 @@ class CSpaceObject : public CObject
 		inline CDesignType *GetOverride (void) { return m_pOverride; }
 		inline CSpaceObject *GetPlayerShip (void) const { return (m_pSystem ? m_pSystem->GetPlayerShip() : NULL); }
 		inline const CVector &GetPos (void) const { return m_vPos; }
+		inline bool GetPOVLRS (void) { return m_fInPOVLRS; }
 		CSovereign *GetSovereignToDefend (void) const;
 		ICCItemPtr GetStaticData (const CString &sAttrib);
 		CG32bitPixel GetSymbolColor (void);

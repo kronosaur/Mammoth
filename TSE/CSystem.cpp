@@ -3716,6 +3716,26 @@ void CSystem::PaintViewportMap (CG32bitImage &Dest, const RECT &rcView, CSpaceOb
 			}
 		}
 
+	//	Paint all projectiles as they appear on the LRS
+
+	for (i = 0; i < GetObjectCount(); i++)
+		{
+		CSpaceObject *pObj = GetObject(i);
+
+		if (pObj 
+				&& (pObj->GetCategory() == CSpaceObject::catMissile || pObj->GetCategory() == CSpaceObject::catBeam)
+				&& Ctx.IsInViewport(pObj))
+			{
+			//	Figure out the position of the object in pixels
+
+			Ctx.Transform(pObj->GetPos(), &x, &y);
+
+			//	Paint the object in the viewport
+			if (pObj->GetPOVLRS())
+				pObj->PaintLRSForeground(Dest, x, y, ViewportTransform());
+			}
+		}
+
 	//	Paint NavPaths
 
 	if (g_pUniverse->GetDebugOptions().IsShowNavPathsEnabled())
