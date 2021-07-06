@@ -1027,6 +1027,7 @@ class CExtensionCollection
 		CExtension *GetBase (void) const { return m_pBase; }
 		CString GetEntityName (DWORD dwUNID);
 		DWORD GetEntityValue (const CString &sName);
+		const TArray<CExtension *>& GetExtensions(void) const { return m_Extensions; };
 		CString GetExternalResourceFilespec (CExtension *pExtension, const CString &sFilename) const;
 		EGameTypes GetGame (void) const { return m_iGame; }
 		bool GetRequiredResources (TArray<CString> *retFilespecs);

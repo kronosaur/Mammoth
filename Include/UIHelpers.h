@@ -72,6 +72,30 @@ class CListCollectionTask : public IHITask
 		CAniListBox *m_pList = NULL;
 	};
 
+class CListExtensionsTask : public IHITask
+	{
+	public:
+		CListExtensionsTask(CHumanInterface &HI,
+							 CExtensionCollection &Extensions, 
+							 int cxWidth,
+							 bool bDebugMode = false);
+		~CListExtensionsTask(void);
+
+		inline IAnimatron *GetListHandoff (void) { IAnimatron *pResult = m_pList; m_pList = NULL; return pResult; }
+
+		//	IHITask virtuals
+		virtual ALERROR OnExecute (ITaskProcessor *pProcessor, CString *retsResult);
+
+	private:
+		void CreateEntry (CExtension *pExtension, int yStart, IAnimatron **retpEntry, int *retcyHeight);
+
+		CExtensionCollection &m_Extensions;
+		int m_cxWidth;
+		bool m_bDebugMode;
+
+		CAniListBox *m_pList;
+	};
+
 class CListSaveFilesTask : public IHITask
 	{
 	public:
