@@ -34,7 +34,7 @@ class CGameRecord
 			};
 
 		CGameRecord (void);
-
+		inline void AddEpitaph(const CString &sEpitaph) { m_AllEpitaphs.Insert(sEpitaph);  }
 		CString GetAdventureID (void) const;
 		inline DWORD GetAdventureUNID (void) const { return m_dwAdventure; }
 		CString GetDescription (DWORD dwParts = descAll) const;
@@ -44,6 +44,8 @@ class CGameRecord
 		inline GenomeTypes GetPlayerGenome (void) const { return m_iGenome; }
 		inline const CString &GetPlayerName (void) const { return m_sName; }
 		inline CString GetPlayTimeString (void) const { return m_Duration.Format(NULL_STR); }
+		inline CString &GetPreviousEpitaph(int iIndex) const { return m_AllEpitaphs.GetAt(iIndex); };
+		inline int GetPreviousEpitaphCount(void) const { return m_AllEpitaphs.GetCount(); };
 		inline int GetResurrectCount (void) const { return m_iResurrectCount; }
 		inline int GetScore (void) const { return m_iScore; }
 		inline CString GetShipClass (void) const { return m_sShipClass; }
@@ -99,6 +101,8 @@ class CGameRecord
 		//	End Game
 		CString m_sEndGameReason;
 		CString m_sEpitaph;
+		
+		TArray<CString> m_AllEpitaphs;			//	Includes ALL recorded epitaphs
 	};
 
 class CGameStats
